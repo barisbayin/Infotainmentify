@@ -6,43 +6,36 @@ namespace Core.Entity
 {
     public class UserSocialChannel : BaseEntity
     {
-        // Hangi platform? (YouTube, Instagram vs.)
+        // -------------------- İlişkiler --------------------
         [Required]
-        public SocialChannelType ChannelType { get; set; }
-
-        // Hangi kullanıcıya ait? (AppUser'a Foreign Key)
-        [Required]
-        public int AppUserId { get; set; } // Veya tipiniz int/Guid ise o olmalı
+        public int AppUserId { get; set; }
 
         [ForeignKey(nameof(AppUserId))]
-        public virtual AppUser AppUser { get; set; }
-
-        // --- Kanal Bilgileri ---
+        public virtual AppUser OwnerUser { get; set; } = null!;
 
         [Required]
-        [StringLength(255)]
-        public string ChannelName { get; set; } // Örn: "Gemini Türkiye"
+        public SocialChannelType ChannelType { get; set; } // YouTube, Instagram, TikTok, etc.
 
-        [StringLength(255)]
-        public string ChannelHandle { get; set; } // Örn: "@geminiTR" (varsa)
+        // -------------------- Kanal Bilgileri --------------------
+        [MaxLength(255)]
+        public string? ChannelName { get; set; } // "Gemini Türkiye"
 
-        [StringLength(500)]
-        public string ChannelUrl { get; set; } // Örn: "https://youtube.com/c/geminiTR"
+        [MaxLength(255)]
+        public string? ChannelHandle { get; set; } // "@geminiTR"
 
-        [StringLength(255)]
-        public string PlatformChannelId { get; set; } // Platformun verdiği ID (Örn: "UC...")
+        [MaxLength(500)]
+        public string? ChannelUrl { get; set; } // "https://youtube.com/@geminiTR"
 
-        // --- API Bilgileri (ÇOK ÖNEMLİ: BU ALANLAR VERİTABANINDA ŞİFRELENMELİ!) ---
+        [MaxLength(255)]
+        public string? PlatformChannelId { get; set; } // Örn: "UCxxxx"
+
+        // -------------------- OAuth / API Token Bilgileri --------------------
+        [Column(TypeName = "nvarchar(max)")]
+        public string? EncryptedTokensJson { get; set; } // JSON blob: access_token, refresh_token, etc.
+
+        public DateTimeOffset? TokenExpiresAt { get; set; }
 
         [Column(TypeName = "nvarchar(max)")]
-        public string EncryptedTokensJson { get; set; }
-
-        public DateTime? TokenExpiresAt { get; set; } // AccessToken'ın ne zaman geçersiz olacağı
-
-        [StringLength(1000)]
-        public string Scopes { get; set; } // Kullanıcının hangi izinleri verdiği (örn: "read:profile write:video")
-
-        // --- Diğer Bilgiler ---
-        public DateTime LastVerifiedAt { get; set; } = DateTime.Now;
+        public string? Scopes { get; set; } // Örn: "youtube.readonly, youtube.upload"
     }
 }

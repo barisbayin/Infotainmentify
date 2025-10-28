@@ -33,5 +33,9 @@ namespace Core.Entity
         public int? PromptId { get; set; }
         public Prompt? Prompt { get; set; }
 
+        [ForeignKey(nameof(UserTopicGeneration))]
+        public int UserTopicGenerationId { get; set; }
+        public UserTopicGeneration UserTopicGeneration { get; set; } = null!;
+
     }
 }

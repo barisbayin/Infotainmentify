@@ -1,34 +1,36 @@
 ﻿using Core.Enums;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
-    public class UserAiConnection : BaseEntity // Id, Created/Updated, CreatedById ...
+    public class UserAiConnection : BaseEntity
     {
         [Required]
         public int UserId { get; set; }
 
+        [ForeignKey(nameof(UserId))]
+        public AppUser User { get; set; } = null!;
+
         [Required, MaxLength(100)]
-        public string Name { get; set; } = null!; // "My OpenAI (work)"
+        public string Name { get; set; } = null!;
 
         [Required]
         public AiProviderType Provider { get; set; }
 
-        [Required]
-        public AiAuthType AuthType { get; set; }
+        [MaxLength(200)]
+        public string? TextModel { get; set; }
 
-        [Required]
-        public AiCapability Capabilities { get; set; }
+        [MaxLength(200)]
+        public string? ImageModel { get; set; }
 
-        public bool IsDefaultForText { get; set; }
+        [MaxLength(200)]
+        public string? VideoModel { get; set; }
 
-        public bool IsDefaultForImage { get; set; }
+        [Column(TypeName = "decimal(3,2)")]
+        public decimal? Temperature { get; set; }
 
-        public bool IsDefaultForEmbedding { get; set; }
-
-        // Encrypted blob (JSON) - never plain text
-        [Required] public string EncryptedCredentialJson { get; set; } = null!;
-
-        public DateTimeOffset? AccessTokenExpiresAt { get; set; } // OAuth
+        [Required, MaxLength(4000)]
+        public string EncryptedCredentialJson { get; set; } = null!;
     }
 }

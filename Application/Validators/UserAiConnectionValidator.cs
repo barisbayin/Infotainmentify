@@ -1,5 +1,4 @@
-﻿using Application.Contracts.Ai;
-using Core.Enums;
+﻿using Application.Contracts.UserAiConnection;
 using FluentValidation;
 
 namespace Application.Validators
@@ -10,18 +9,6 @@ namespace Application.Validators
         {
             RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
             RuleFor(x => x.Credentials).NotNull();
-
-            When(x => x.AuthType == AiAuthType.ApiKey, () =>
-            {
-                RuleFor(x => x.Credentials.ContainsKey("apiKey"))
-                    .Equal(true).WithMessage("apiKey is required.");
-            });
-
-            When(x => x.AuthType == AiAuthType.ApiKeySecret, () =>
-            {
-                RuleFor(x => x.Credentials.ContainsKey("apiKey")).Equal(true);
-                RuleFor(x => x.Credentials.ContainsKey("apiSecret")).Equal(true);
-            });
 
             // OAuth init: kaydı boş credential ile oluşturup "Connect" akışıyla tamamlayabiliriz.
             // Eğer doğrudan token verilecekse:

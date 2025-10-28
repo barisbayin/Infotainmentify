@@ -1,3 +1,4 @@
+using Application;
 using Application.Abstractions;
 using Application.Options;
 using Application.Services;
@@ -16,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Reflection;
 using System.Text;
+using System.Text.Json.Serialization;
 using WebAPI.Service;
 
 namespace WebAPI
@@ -43,6 +45,8 @@ namespace WebAPI
             builder.Services.AddScoped<TopicService>();
             builder.Services.AddScoped<AuthService>();
             builder.Services.AddScoped<AppUserService>();
+            builder.Services.AddScoped<UserAiConnectionService>();
+            builder.Services.AddScoped<UserSocialChannelService>();
 
 
             builder.Services.AddHttpContextAccessor();
@@ -62,8 +66,16 @@ namespace WebAPI
             builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
             builder.Services.AddSingleton<IJwtTokenFactory, JwtTokenFactory>();
-
+            builder.Services.AddDataProtection(); // <-- bu DataProtection key ring'i hazýrlar
+            builder.Services.AddScoped<ISecretStore, DataProtectionSecretStore>();
             builder.Services.AddSingleton<IUserDirectoryService, UserDirectoryService>();
+
+
+            builder.Services.AddControllers()
+              .AddJsonOptions(o =>
+              {
+                  o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+              });
 
             builder.Services
                 .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

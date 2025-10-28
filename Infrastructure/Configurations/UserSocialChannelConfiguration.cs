@@ -37,11 +37,6 @@ namespace Infrastructure.Configurations
 
             // Token alanları potansiyel olarak çok uzun olabilir ve şifrelenince uzar.
             // Bu yüzden HasMaxLength yerine HasColumnType kullanmak daha sağlıklıdır.
-            b.Property(x => x.AccessToken).HasColumnType("nvarchar(max)");
-            b.Property(x => x.RefreshToken).HasColumnType("nvarchar(max)");
-
-            // Diğer zorunlu alanlar
-            b.Property(x => x.LastVerifiedAt).IsRequired();
 
         }
     }

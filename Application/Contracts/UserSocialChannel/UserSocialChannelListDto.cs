@@ -1,26 +1,15 @@
-﻿namespace Application.Contracts.UserSocialChannel
+﻿using Core.Enums;
+
+namespace Application.Contracts.UserSocialChannel
 {
     public class UserSocialChannelListDto
     {
         public int Id { get; set; }
-
-        // Enum'ın string karşılığını (YouTube, Instagram) döndürmek 
-        // UI (Arayüz) için daha kullanışlıdır.
-        public string ChannelType { get; set; }
-
-        public string ChannelName { get; set; }
-
-        // Kanalın @kullaniciadi gibi bilgisi
-        public string ChannelHandle { get; set; }
-
+        public SocialChannelType ChannelType { get; set; }
+        public string? ChannelName { get; set; }
+        public string? ChannelHandle { get; set; }
+        public string? ChannelUrl { get; set; }
+        public DateTimeOffset LastVerifiedAt { get; set; }
         public bool IsActive { get; set; }
-
-        public DateTime LastVerifiedAt { get; set; }
-
-        /* * Servis katmanında veya AutoMapper profilinde hesaplanacak ekstra bir özellik.
-         * UI'da "Bağlantı Süresi Doldu" gibi bir uyarı göstermek için kullanışlıdır.
-         * Hesaplama: (TokenExpiresAt.HasValue && TokenExpiresAt.Value <= DateTime.UtcNow) ? false : true
-         */
-        public bool IsConnectionValid { get; set; }
     }
 }
