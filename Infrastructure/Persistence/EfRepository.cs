@@ -1,6 +1,7 @@
 ﻿using Core.Contracts;
 using Core.Entity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 using System.Linq.Expressions;
 
 namespace Infrastructure.Persistence
@@ -68,6 +69,43 @@ namespace Infrastructure.Persistence
         {
             var q = ApplyIncludes(BaseQuery(asNoTracking).Where(predicate), includes);
             return await q.FirstOrDefaultAsync(ct);
+        }
+
+
+        public async Task<IReadOnlyList<TEntity>> FindAsync(
+    Expression<Func<TEntity, bool>> predicate,
+    Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? include = null,
+    bool asNoTracking = true,
+    CancellationToken ct = default)
+        {
+            IQueryable<TEntity> query = _dbSet;
+
+            if (asNoTracking)
+                query = query.AsNoTracking();
+
+            if (include != null)
+                query = include(query);
+
+            query = query.Where(predicate);
+
+            return await query.ToListAsync(ct);
+        }
+
+        public async Task<TEntity?> FirstOrDefaultAsync(
+            Expression<Func<TEntity, bool>> predicate,
+            Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? include = null,
+            bool asNoTracking = true,
+            CancellationToken ct = default)
+        {
+            IQueryable<TEntity> query = _dbSet;
+
+            if (asNoTracking)
+                query = query.AsNoTracking();
+
+            if (include != null)
+                query = include(query);
+
+            return await query.FirstOrDefaultAsync(predicate, ct);
         }
 
         public Task<bool> AnyAsync(Expression<Func<TEntity, bool>> predicate, CancellationToken ct = default)

@@ -18,11 +18,11 @@ namespace WebAPI.Controllers
 
         public record GenerateRequest(int AiConnectionId, int PromptId, int Count = 10);
 
-        [HttpPost("generate")]
-        public async Task<IActionResult> Generate([FromBody] GenerateRequest req, CancellationToken ct)
-        {
-            await _svc.GenerateAndSaveAsync(req.AiConnectionId, req.PromptId, req.Count, ct);
-            return NoContent(); // ✅ DB'ye yazıldı, geri dönüş yok
-        }
+        //[HttpPost("generate")]
+        //public async Task<IActionResult> Generate([FromBody] GenerateRequest req, CancellationToken ct)
+        //{
+        //    await _svc.GenerateAndSaveAsync(req.AiConnectionId, req.PromptId, req.Count, ct);
+        //    return NoContent(); // ✅ DB'ye yazıldı, geri dönüş yok
+        //}
     }
 }

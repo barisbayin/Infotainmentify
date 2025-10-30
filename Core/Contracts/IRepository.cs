@@ -1,5 +1,7 @@
 ﻿using Core.Entity;
+using Microsoft.EntityFrameworkCore.Query;
 using System.Linq.Expressions;
+
 
 namespace Core.Contracts
 {
@@ -23,6 +25,19 @@ namespace Core.Contracts
             bool asNoTracking = true,
             CancellationToken ct = default,
             params Expression<Func<TEntity, object>>[] includes);
+
+
+        Task<IReadOnlyList<TEntity>> FindAsync(
+            Expression<Func<TEntity, bool>> predicate,
+            Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? include = null,
+            bool asNoTracking = true,
+            CancellationToken ct = default);
+
+        Task<TEntity?> FirstOrDefaultAsync(
+            Expression<Func<TEntity, bool>> predicate,
+            Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? include = null,
+            bool asNoTracking = true,
+            CancellationToken ct = default);
 
         Task<bool> AnyAsync(Expression<Func<TEntity, bool>> predicate, CancellationToken ct = default);
 

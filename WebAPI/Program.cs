@@ -1,5 +1,7 @@
 using Application;
 using Application.Abstractions;
+using Application.AiLayer;
+using Application.Job;
 using Application.Options;
 using Application.Services;
 using Core.Abstractions;
@@ -9,12 +11,15 @@ using Core.Security;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Infrastructure;
+using Infrastructure.Job;
+using Infrastructure.Job.JobExecutors;
 using Infrastructure.Persistence;
 using Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Quartz;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -38,8 +43,9 @@ namespace WebAPI
                 opts.AddInterceptors(new TimestampInterceptor());
             });
 
-
+            builder.Services.AddHttpClient();
             builder.Services.AddInfrastructure(builder.Configuration);
+            builder.Services.AddAppQuartz();
 
             builder.Services.AddScoped<PromptService>();
             builder.Services.AddScoped<TopicService>();
@@ -47,7 +53,12 @@ namespace WebAPI
             builder.Services.AddScoped<AppUserService>();
             builder.Services.AddScoped<UserAiConnectionService>();
             builder.Services.AddScoped<UserSocialChannelService>();
-
+            builder.Services.AddScoped<TopicGenerationProfileService>();
+            builder.Services.AddScoped<JobSettingService>();
+            builder.Services.AddScoped<JobExecutionService>();
+            builder.Services.AddScoped<TopicGenerationService>();
+            builder.Services.AddScoped<JobExecutorFactory>();
+            //builder.Services.AddScoped<TopicGenerationService>();
 
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
@@ -69,6 +80,15 @@ namespace WebAPI
             builder.Services.AddDataProtection(); // <-- bu DataProtection key ring'i hazýrlar
             builder.Services.AddScoped<ISecretStore, DataProtectionSecretStore>();
             builder.Services.AddSingleton<IUserDirectoryService, UserDirectoryService>();
+
+            builder.Services.AddScoped<IJobExecutor, TopicGenerationJobExecutor>();
+
+            //builder.Services.AddScoped<IJobExecutor, StoryGenerationJobExecutor>();
+
+            builder.Services.AddScoped<IAiGeneratorFactory, AiGeneratorFactory>();
+            builder.Services.AddScoped<GeminiAiClient>();
+            builder.Services.AddScoped<OpenAiClient>();
+
 
 
             builder.Services.AddControllers()

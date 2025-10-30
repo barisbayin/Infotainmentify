@@ -8,18 +8,28 @@ namespace Application.AiLayer
     public class GeminiAiClient : IAiGenerator
     {
         private readonly HttpClient _http;
-        private readonly string _apiKey;
-        private readonly string _model;
+        private IReadOnlyDictionary<string, string>? _creds;
+        private string _apiKey = string.Empty;
+        private string _model = "gemini-1.5-flash";
 
         public AiProviderType ProviderType => AiProviderType.GoogleVertex;
 
-        public GeminiAiClient(HttpClient http, IReadOnlyDictionary<string, string> creds)
+        // 🔹 HttpClient DI'den geliyor
+        public GeminiAiClient(HttpClient http)
         {
             _http = http;
+        }
+
+        // 🔹 Credential bilgilerini runtime’da set ediyoruz
+        public void Initialize(IReadOnlyDictionary<string, string> creds)
+        {
+            _creds = creds;
             _apiKey = creds.TryGetValue("apiKey", out var key)
-                ? key : throw new InvalidOperationException("Gemini apiKey missing");
-            _model = creds.TryGetValue("model", out var model)
-                ? model : "gemini-1.5-flash";
+                ? key
+                : throw new InvalidOperationException("Gemini apiKey missing");
+
+            if (creds.TryGetValue("model", out var model))
+                _model = model;
         }
 
         public async Task<string> GenerateTextAsync(string prompt, double temperature = 0.7, string? model = null, CancellationToken ct = default)

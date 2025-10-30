@@ -1,4 +1,5 @@
 ﻿using Core.Contracts;
+using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence
 {
@@ -16,5 +17,7 @@ namespace Infrastructure.Persistence
             await _ctx.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
+
+        public DbContext GetDbContext() => _ctx;
     }
 }

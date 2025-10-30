@@ -7,6 +7,9 @@ namespace Application.AiLayer
     {
         AiProviderType ProviderType { get; }
 
+        // 🔹 Credential initialization (runtime)
+        void Initialize(IReadOnlyDictionary<string, string> credentials);
+
         // --- Text / Topic Üretimi ---
         Task<string> GenerateTextAsync(
             string prompt,
@@ -22,7 +25,6 @@ namespace Application.AiLayer
             string? model = null,
             double temperature = 0.7,
             CancellationToken ct = default);
-
 
         // --- Görsel Üretimi ---
         Task<byte[]> GenerateImageAsync(

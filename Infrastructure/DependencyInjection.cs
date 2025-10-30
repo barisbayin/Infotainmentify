@@ -3,6 +3,7 @@ using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Quartz;
 
 namespace Infrastructure
 {
@@ -19,5 +20,19 @@ namespace Infrastructure
 
             return services;
         }
+
+        public static IServiceCollection AddAppQuartz(this IServiceCollection services)
+        {
+            services.AddQuartz(q =>
+            {
+                // 3.8+ sürümlerde DI JobFactory varsayılan
+                q.UseSimpleTypeLoader();
+            });
+
+            services.AddQuartzHostedService(opt => opt.WaitForJobsToComplete = true);
+
+            return services;
+        }
+
     }
 }

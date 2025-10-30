@@ -8,22 +8,30 @@ namespace Application.AiLayer
     public class OpenAiClient : IAiGenerator
     {
         private readonly HttpClient _http;
-        private readonly string _apiKey;
-        private readonly string _model;
+        private IReadOnlyDictionary<string, string>? _creds;
+        private string _apiKey = string.Empty;
+        private string _model = "gpt-4o-mini";
 
         public AiProviderType ProviderType => AiProviderType.OpenAI;
 
-        public OpenAiClient(HttpClient http, IReadOnlyDictionary<string, string> creds)
+        // 🔹 HttpClient sadece DI tarafından verilir
+        public OpenAiClient(HttpClient http)
         {
             _http = http;
+        }
+
+        // 🔹 Credential bilgileri runtime’da set edilir
+        public void Initialize(IReadOnlyDictionary<string, string> creds)
+        {
+            _creds = creds;
             _apiKey = creds.TryGetValue("apiKey", out var key)
                 ? key
                 : throw new InvalidOperationException("OpenAI apiKey missing");
 
-            _model = creds.TryGetValue("model", out var model)
-                ? model
-                : "gpt-4o-mini";
+            if (creds.TryGetValue("model", out var model))
+                _model = model;
         }
+
 
         // ---------------- TEXT ----------------
         public async Task<string> GenerateTextAsync(

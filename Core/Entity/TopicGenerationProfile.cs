@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
-    public class UserTopicGeneration : BaseEntity
+    public class TopicGenerationProfile : BaseEntity
     {
         [Required]
         public int AppUserId { get; set; }
@@ -38,8 +38,5 @@ namespace Core.Entity
         [MaxLength(50)]
         public string Status { get; set; } = "Pending"; // Pending | Success | Failed
 
-        [MaxLength(2000)]
-        public string? ErrorMessage { get; set; }
     }
-
 }

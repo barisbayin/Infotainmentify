@@ -1,27 +1,28 @@
 ﻿using Core.Enums;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Application.AiLayer
 {
     public class AiGeneratorFactory : IAiGeneratorFactory
     {
-        private readonly IHttpClientFactory _httpFactory;
+        private readonly IServiceProvider _serviceProvider;
 
-        public AiGeneratorFactory(IHttpClientFactory httpFactory)
+        public AiGeneratorFactory(IServiceProvider serviceProvider)
         {
-            _httpFactory = httpFactory;
+            _serviceProvider = serviceProvider;
         }
 
         public IAiGenerator Resolve(AiProviderType provider, IReadOnlyDictionary<string, string> creds)
         {
-            var http = _httpFactory.CreateClient();
-
-            return provider switch
+            IAiGenerator gen = provider switch
             {
-                AiProviderType.OpenAI => new OpenAiClient(http, creds),
-                AiProviderType.GoogleVertex => new GeminiAiClient(http, creds),
+                AiProviderType.OpenAI => _serviceProvider.GetRequiredService<OpenAiClient>(),
+                AiProviderType.GoogleVertex => _serviceProvider.GetRequiredService<GeminiAiClient>(),
                 _ => throw new NotSupportedException($"Provider '{provider}' not supported.")
             };
+
+            gen.Initialize(creds);
+            return gen;
         }
     }
-
 }

@@ -13,6 +13,7 @@ namespace Application.Services
         private readonly IRepository<UserAiConnection> _aiRepo;
         private readonly IRepository<Prompt> _promptRepo;
         private readonly IRepository<Topic> _topicRepo;
+        private readonly IRepository<TopicGenerationProfile> _profileRepo;
         private readonly ISecretStore _secret;
         private readonly IUnitOfWork _uow;
         private readonly ICurrentUserService _current;
@@ -22,6 +23,7 @@ namespace Application.Services
             IRepository<UserAiConnection> aiRepo,
             IRepository<Prompt> promptRepo,
             IRepository<Topic> topicRepo,
+            IRepository<TopicGenerationProfile> profileRepo,
             ISecretStore secret,
             IUnitOfWork uow,
             ICurrentUserService current)
@@ -30,6 +32,7 @@ namespace Application.Services
             _aiRepo = aiRepo;
             _promptRepo = promptRepo;
             _topicRepo = topicRepo;
+            _profileRepo = profileRepo;
             _secret = secret;
             _uow = uow;
             _current = current;
@@ -38,14 +41,17 @@ namespace Application.Services
         /// <summary>
         /// Seçilen prompt ve AI bağlantısına göre topic üretir ve DB'ye kaydeder.
         /// </summary>
-        public async Task GenerateAndSaveAsync(int aiConnId, int promptId, int count, CancellationToken ct)
+        public async Task<string> GenerateFromProfileAsync(int profileId, CancellationToken ct)
         {
             var userId = _current.UserId;
 
-            // --- AI bağlantısı ve prompt'u al ---
-            var aiConn = await _aiRepo.GetByIdAsync(aiConnId, true, ct)
+            var profile = await _profileRepo.GetByIdAsync(profileId, true, ct)
+                ?? throw new InvalidOperationException("Topic generation profili bulunamadı.");
+
+            var aiConn = await _aiRepo.GetByIdAsync(profile.AiConnectionId, true, ct)
                 ?? throw new InvalidOperationException("AI bağlantısı bulunamadı.");
-            var prompt = await _promptRepo.GetByIdAsync(promptId, true, ct)
+
+            var prompt = await _promptRepo.GetByIdAsync(profile.PromptId, true, ct)
                 ?? throw new InvalidOperationException("Prompt bulunamadı.");
 
             // --- Credential çöz ---
@@ -53,26 +59,27 @@ namespace Application.Services
             var creds = JsonSerializer.Deserialize<Dictionary<string, string>>(credsJson)
                 ?? throw new InvalidOperationException("Geçersiz credential formatı.");
 
-            // --- Uygun generator’u al ---
+            // --- AI generator seç ---
             var generator = _factory.Resolve(aiConn.Provider, creds);
+            var temperature = (double)(aiConn.Temperature ?? 0.8M);
 
-            // --- AI'dan topic iste ---
+            // --- Üretim ---
             var topics = await generator.GenerateTopicsAsync(
                 systemPrompt: prompt.Name,
                 userPrompt: prompt.Body,
-                count: count,
+                count: profile.RequestedCount,
                 model: creds.GetValueOrDefault("model", aiConn.TextModel),
-                temperature: double.TryParse(creds.GetValueOrDefault("temperature"), out var t)? t : (aiConn.Temperature.HasValue ? (double)aiConn.Temperature.Value : 0.8D),
+                temperature: temperature,
                 ct: ct);
 
             if (topics.Count == 0)
-                return;
+                return "Hiç konu üretilmedi.";
 
-            // --- DB'ye yaz ---
+            // --- Kaydet ---
             var entities = topics.Select(t => new Topic
             {
                 UserId = userId,
-                PromptId = promptId,
+                PromptId = prompt.Id,
                 TopicCode = t.Id ?? Guid.NewGuid().ToString("N")[..12],
                 Category = t.Category,
                 Premise = t.Premise,
@@ -86,7 +93,10 @@ namespace Application.Services
 
             await _topicRepo.AddRangeAsync(entities, ct);
             await _uow.SaveChangesAsync(ct);
+
+            return $"{entities.Count} adet konu başarıyla üretildi.";
         }
+
     }
 
 }
