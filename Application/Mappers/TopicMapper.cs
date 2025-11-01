@@ -13,7 +13,12 @@ namespace Application.Contracts.Mappers
             Tone = e.Tone,
             NeedsFootage = e.NeedsFootage,
             FactCheck = e.FactCheck,
-            UpdatedAt = e.UpdatedAt
+            IsActive = e.IsActive,
+            UpdatedAt = e.UpdatedAt,
+            PromptId = e.PromptId,
+            PromptTitle = e.Prompt?.Name, // Prompt navigation varsa
+            PremiseTr = e.PremiseTr,
+            Premise = e.Premise
         };
 
         public static TopicDetailDto ToDetailDto(this Topic e) => new()
@@ -29,7 +34,8 @@ namespace Application.Contracts.Mappers
             FactCheck = e.FactCheck,
             TagsJson = e.TagsJson,
             TopicJson = e.TopicJson,
-            PromptId = e.PromptId
+            PromptId = e.PromptId,
+            IsActive = e.IsActive
         };
     }
 }

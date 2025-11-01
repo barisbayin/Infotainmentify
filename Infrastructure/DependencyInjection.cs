@@ -29,7 +29,7 @@ namespace Infrastructure
                 q.UseSimpleTypeLoader();
             });
 
-            services.AddQuartzHostedService(opt => opt.WaitForJobsToComplete = true);
+            services.AddQuartzHostedService(opt => opt.WaitForJobsToComplete = false);
 
             return services;
         }

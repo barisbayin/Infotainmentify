@@ -7,8 +7,9 @@ namespace Core.Entity
     {
         [Key]
         public int Id { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime? UpdatedAt { get; set; }
+        public bool IsActive { get; set; } = true;
 
         // Soft delete kullanacaksan:
         public bool Removed { get; set; }

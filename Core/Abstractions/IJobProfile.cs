@@ -1,6 +1,6 @@
 ﻿using Core.Enums;
 
-namespace Application.Job
+namespace Core.Abstractions 
 {
     public interface IJobProfile
     {

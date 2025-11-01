@@ -47,6 +47,8 @@ namespace WebAPI
             builder.Services.AddInfrastructure(builder.Configuration);
             builder.Services.AddAppQuartz();
 
+    
+
             builder.Services.AddScoped<PromptService>();
             builder.Services.AddScoped<TopicService>();
             builder.Services.AddScoped<AuthService>();
@@ -135,6 +137,11 @@ namespace WebAPI
 
 
             var app = builder.Build();
+
+            using (var scope = app.Services.CreateScope())
+            {
+                await Application.Job.JobBootstrapper.InitializeAsync(scope.ServiceProvider);
+            }
 
             using (var scope = app.Services.CreateScope())
             {

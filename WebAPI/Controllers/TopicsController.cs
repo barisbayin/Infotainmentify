@@ -45,5 +45,12 @@ namespace WebAPI.Controllers
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
             => (await _svc.DeleteAsync(_current.UserId, id, ct)) ? NoContent() : NotFound();
+
+        [HttpPut("{id}/active/{isActive}")]
+        public async Task<IActionResult> ToggleActive(int id, bool isActive, CancellationToken ct)
+        {
+            await _svc.ToggleActiveAsync(_current.UserId, id, isActive, ct);
+            return Ok();
+        }
     }
 }

@@ -61,6 +61,32 @@ namespace Infrastructure.Persistence
             return await q.ToListAsync(ct);
         }
 
+        public async Task<IReadOnlyList<TEntity>> FindAsync<TOrderKey>(
+    Expression<Func<TEntity, bool>> predicate,
+    Expression<Func<TEntity, TOrderKey>> orderBy,
+    bool desc = true,
+    bool asNoTracking = true,
+    CancellationToken ct = default,
+    params Expression<Func<TEntity, object>>[] includes)
+        {
+            IQueryable<TEntity> query = _dbSet;
+
+            foreach (var include in includes)
+                query = query.Include(include);
+
+            query = query.Where(predicate);
+
+            query = desc
+                ? query.OrderByDescending(orderBy)
+                : query.OrderBy(orderBy);
+
+            if (asNoTracking)
+                query = query.AsNoTracking();
+
+            return await query.ToListAsync(ct);
+        }
+
+
         public async Task<TEntity?> FirstOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
             bool asNoTracking = true,
@@ -158,7 +184,7 @@ namespace Infrastructure.Persistence
             if (_applySoftDeleteFilter && removedProp != null && removedAtProp != null)
             {
                 removedProp.SetValue(entity, true);
-                removedAtProp.SetValue(entity, DateTime.UtcNow);
+                removedAtProp.SetValue(entity, DateTime.Now);
                 _dbSet.Update(entity);
             }
             else

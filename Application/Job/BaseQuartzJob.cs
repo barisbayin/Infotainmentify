@@ -1,4 +1,5 @@
 ﻿using Application.Services;
+using Core.Abstractions;
 using Core.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using Quartz;
@@ -30,25 +31,18 @@ namespace Application.Job
 
             try
             {
-                // 2️⃣ JobSetting detayını al
-                var jobDetail = await jobService.GetAsync(jobId, ct);
-                if (jobDetail == null)
-                    throw new Exception($"Job bulunamadı: {jobId}");
+                // 2️⃣ JobSetting detayını al (User bağımsız)
+                var jobEntity = await jobService.GetByIdNoUserAsync(jobId, ct)
+                    ?? throw new Exception($"Job bulunamadı: {jobId}");
 
                 // 3️⃣ Executor çöz
-                var executor = factory.Resolve(Enum.Parse<JobType>(jobDetail.JobType, true));
+                var executor = factory.Resolve(jobEntity.JobType);
 
-                // 4️⃣ Profile nesnesini çöz (örneğin TopicGenerationProfile)
-                var jobEntity = await jobService.GetEntityAsync(jobId, ct)
-                    ?? throw new Exception($"Job entity çözümlenemedi: {jobId}");
+                // 4️⃣ Profile nesnesini çöz (örnek: TopicGenerationProfile)
+                IJobProfile profile = await jobService.ResolveProfileAsync(jobEntity, ct)
+                    ?? throw new Exception($"Profile çözümlenemedi: {jobEntity.ProfileType}");
 
-                var profileObj = await jobService.ResolveProfileAsync(jobEntity, ct)
-                    ?? throw new Exception($"Profile çözümlenemedi: {jobDetail.ProfileType}");
-
-                if (profileObj is not IJobProfile profile)
-                    throw new Exception($"Profile '{jobDetail.ProfileType}' IJobProfile arayüzünü implemente etmiyor.");
-
-                // 5️⃣ Job çalıştır
+                // 5️⃣ Çalıştır
                 var message = await executor.ExecuteAsync(profile, ct);
 
                 // 6️⃣ Başarılı olarak kaydet

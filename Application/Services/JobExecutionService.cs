@@ -65,7 +65,7 @@ namespace Application.Services
             {
                 JobId = jobId,
                 Status = JobStatus.Running,
-                StartedAt = DateTimeOffset.UtcNow,
+                StartedAt = DateTimeOffset.Now,
                 ResultJson = "{}"
             };
 
@@ -85,7 +85,7 @@ namespace Application.Services
             if (entity == null) return;
 
             entity.Status = JobStatus.Success;
-            entity.CompletedAt = DateTimeOffset.UtcNow;
+            entity.CompletedAt = DateTimeOffset.Now;
             entity.ResultJson = resultMessage;
 
             await _uow.SaveChangesAsync(ct);
@@ -102,7 +102,7 @@ namespace Application.Services
             if (entity == null) return;
 
             entity.Status = JobStatus.Failed;
-            entity.CompletedAt = DateTimeOffset.UtcNow;
+            entity.CompletedAt = DateTimeOffset.Now;
             entity.ErrorMessage = errorMessage;
 
             await _uow.SaveChangesAsync(ct);

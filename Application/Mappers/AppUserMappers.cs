@@ -11,7 +11,7 @@ namespace Application.Mappers
             Email = u.Email,
             Username = u.Username,
             Role = u.Role.ToString(),
-            Active = !u.Removed
+            Active = !u.IsActive
         };
 
         public static AppUserDetailDto ToDetailDto(this AppUser u) => new()
@@ -21,7 +21,7 @@ namespace Application.Mappers
             Username = u.Username,
             Role = u.Role.ToString(),
             DirectoryName = u.DirectoryName,
-            Active = !u.Removed
+            Active = !u.IsActive
         };
     }
 }

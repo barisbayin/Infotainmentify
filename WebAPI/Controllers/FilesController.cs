@@ -51,8 +51,8 @@ namespace WebAPI.Controllers
 
         //    // Klasör: /Users/{User}/files/uploads/yyyy/MM
         //    var uploadsRoot = _dirs.GetUserBaseFiles(user);
-        //    var year = DateTime.UtcNow.ToString("yyyy");
-        //    var month = DateTime.UtcNow.ToString("MM");
+        //    var year = DateTime.Now.ToString("yyyy");
+        //    var month = DateTime.Now.ToString("MM");
         //    var targetDir = Path.Combine(uploadsRoot, "uploads", year, month);
         //    Directory.CreateDirectory(targetDir);
 
@@ -90,7 +90,7 @@ namespace WebAPI.Controllers
         //    var publicUrl = _dirs.GetPublicFileUrl(user, Path.Combine("uploads", year, month, safeName).Replace('\\', '/'));
 
         //    // Opsiyonel: DB’de bir Files tablosuna kaydet (örnek):
-        //    // var entity = new MediaFile { Id = id, UserId = user.Id, OriginalName = originalName, Path = targetPath, Url = publicUrl, Sha256 = sha256Hex, Size = file.Length, ContentType = file.ContentType, CreatedAt = DateTime.UtcNow };
+        //    // var entity = new MediaFile { Id = id, UserId = user.Id, OriginalName = originalName, Path = targetPath, Url = publicUrl, Sha256 = sha256Hex, Size = file.Length, ContentType = file.ContentType, CreatedAt = DateTime.Now };
         //    // _db.Add(entity); await _db.SaveChangesAsync(ct);
 
         //    // İçerik türü normalize et

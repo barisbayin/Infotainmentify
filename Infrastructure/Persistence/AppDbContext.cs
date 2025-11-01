@@ -55,7 +55,7 @@ namespace Infrastructure.Persistence
         }
         private void Stamp()
         {
-            var now = DateTime.UtcNow;
+            var now = DateTime.Now;
             foreach (var e in ChangeTracker.Entries<BaseEntity>())
             {
                 if (e.State == EntityState.Added) e.Entity.CreatedAt = now;

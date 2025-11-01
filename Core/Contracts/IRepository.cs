@@ -20,6 +20,14 @@ namespace Core.Contracts
             CancellationToken ct = default,
             params Expression<Func<TEntity, object>>[] includes);
 
+        Task<IReadOnlyList<TEntity>> FindAsync<TOrderKey>(
+            Expression<Func<TEntity, bool>> predicate,
+            Expression<Func<TEntity, TOrderKey>> orderBy,
+            bool desc = true,
+            bool asNoTracking = true,
+            CancellationToken ct = default,
+            params Expression<Func<TEntity, object>>[] includes);
+
         Task<TEntity?> FirstOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
             bool asNoTracking = true,

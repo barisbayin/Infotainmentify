@@ -105,11 +105,15 @@ namespace Application.Services
         }
 
         // Admin: aktif pasif (soft delete)
-        public async Task SetActiveAsync(int userId, bool active, CancellationToken ct)
+        public async Task SetActiveAsync(int userId, bool isActive, CancellationToken ct)
         {
+            if (userId == _current.UserId && !isActive)
+                throw new InvalidOperationException("You cannot deactivate your own account.");
+
             var u = await _repo.GetByIdAsync(userId, asNoTracking: false, ct)
                     ?? throw new InvalidOperationException("User not found.");
-            u.Removed = !active;
+
+            u.IsActive = isActive; // 🔥 tersine çevirme yok artık
             _repo.Update(u);
             await _uow.SaveChangesAsync(ct);
         }

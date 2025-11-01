@@ -20,8 +20,6 @@ namespace Core.Entity
         [MaxLength(1000)]
         public string? Description { get; set; }
 
-        public bool IsActive { get; set; } = true;
-
         [Required]                     // Prompt şablonu (örn. Scriban/Plain)
         public string Body { get; set; } = default!;
     }

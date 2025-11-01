@@ -29,16 +29,20 @@ namespace Application.Services
                 x => x.AiConnection);
 
         // -------------------- Tek kayıt --------------------
-        public Task<TopicGenerationProfile?> GetAsync(
-            int userId,
-            int id,
-            CancellationToken ct)
-            => _repo.FirstOrDefaultAsync(
-                p => p.AppUserId == userId && p.Id == id,
+        public async Task<TopicGenerationProfile?> GetAsync(
+           int userId, int id, CancellationToken ct, bool onlyActive = false)
+        {
+            var q = await _repo.FindAsync(
+                p => p.AppUserId == userId &&
+                     p.Id == id &&
+                     (!onlyActive || p.IsActive),
                 asNoTracking: true,
                 ct: ct,
-                x => x.Prompt,
-                x => x.AiConnection);
+                x => x.Prompt, x => x.AiConnection);
+
+            return q.FirstOrDefault();
+        }
+
 
 
         /// <summary>
@@ -69,7 +73,7 @@ namespace Application.Services
                     ModelName = modelName,
                     RequestedCount = dto.RequestedCount,
                     RawResponseJson = dto.RawResponseJson ?? "{}",
-                    StartedAt = dto.StartedAt ?? DateTimeOffset.UtcNow,
+                    StartedAt = dto.StartedAt ?? DateTimeOffset.Now,
                     CompletedAt = dto.CompletedAt,
                     Status = dto.Status ?? "Pending"
                 };

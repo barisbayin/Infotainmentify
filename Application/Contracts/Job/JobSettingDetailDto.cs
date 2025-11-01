@@ -9,7 +9,7 @@
         public string ProfileType { get; set; } = default!;
         public bool IsAutoRunEnabled { get; set; }
         public decimal? PeriodHours { get; set; }
-        public string Status { get; set; } = default!;
+        public string? Status { get; set; } = default!;
         public string? LastError { get; set; }
         public DateTimeOffset? LastRunAt { get; set; }
     }

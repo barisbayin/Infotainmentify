@@ -47,23 +47,31 @@ namespace Application.Services
 
             var profile = await _profileRepo.GetByIdAsync(profileId, true, ct)
                 ?? throw new InvalidOperationException("Topic generation profili bulunamadı.");
+            if (!profile.IsActive)
+                throw new InvalidOperationException("Bu profil pasif durumda, topic üretimi yapılamaz.");
 
             var aiConn = await _aiRepo.GetByIdAsync(profile.AiConnectionId, true, ct)
                 ?? throw new InvalidOperationException("AI bağlantısı bulunamadı.");
+            if (!aiConn.IsActive)
+                throw new InvalidOperationException("AI bağlantısı pasif durumda, işlem yapılamaz.");
 
             var prompt = await _promptRepo.GetByIdAsync(profile.PromptId, true, ct)
                 ?? throw new InvalidOperationException("Prompt bulunamadı.");
+            if (!prompt.IsActive)
+                throw new InvalidOperationException("Prompt pasif durumda, topic üretimi yapılamaz.");
+
+            // user fallback
+            if (userId <= 0)
+                userId = profile.AppUserId;
 
             // --- Credential çöz ---
             var credsJson = _secret.Unprotect(aiConn.EncryptedCredentialJson);
             var creds = JsonSerializer.Deserialize<Dictionary<string, string>>(credsJson)
                 ?? throw new InvalidOperationException("Geçersiz credential formatı.");
 
-            // --- AI generator seç ---
             var generator = _factory.Resolve(aiConn.Provider, creds);
             var temperature = (double)(aiConn.Temperature ?? 0.8M);
 
-            // --- Üretim ---
             var topics = await generator.GenerateTopicsAsync(
                 systemPrompt: prompt.Name,
                 userPrompt: prompt.Body,
@@ -75,14 +83,14 @@ namespace Application.Services
             if (topics.Count == 0)
                 return "Hiç konu üretilmedi.";
 
-            // --- Kaydet ---
-            var entities = topics.Select(t => new Topic
+            var entities = topics.Select((t, i) => new Topic
             {
                 UserId = userId,
                 PromptId = prompt.Id,
-                TopicCode = t.Id ?? Guid.NewGuid().ToString("N")[..12],
+                TopicCode = $"T_P_{profileId}_{DateTime.Now:yyyyMMddHHmmss}_{i:D3}",
                 Category = t.Category,
                 Premise = t.Premise,
+                PremiseTr = t.PremiseTr,
                 Tone = t.Tone,
                 PotentialVisual = t.PotentialVisual,
                 NeedsFootage = t.NeedsFootage,
@@ -96,6 +104,7 @@ namespace Application.Services
 
             return $"{entities.Count} adet konu başarıyla üretildi.";
         }
+
 
     }
 

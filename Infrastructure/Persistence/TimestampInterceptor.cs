@@ -21,22 +21,22 @@ namespace Infrastructure.Persistence
         private static void Stamp(DbContext? ctx)
         {
             if (ctx is null) return;
-            var utcNow = DateTime.UtcNow;
+            var Now = DateTime.Now;
 
             foreach (var e in ctx.ChangeTracker.Entries<BaseEntity>())
             {
                 if (e.State == EntityState.Added)
-                    e.Entity.CreatedAt = utcNow;
+                    e.Entity.CreatedAt = Now;
 
                 if (e.State == EntityState.Modified)
-                    e.Entity.UpdatedAt = utcNow;
+                    e.Entity.UpdatedAt = Now;
 
                 // Eğer Delete çağrısında soft delete’e çevirmek istersen:
                 if (e.State == EntityState.Deleted)
                 {
                     e.State = EntityState.Modified;
                     e.Entity.Removed = true;
-                    e.Entity.RemovedAt = utcNow;
+                    e.Entity.RemovedAt = Now;
                 }
             }
         }

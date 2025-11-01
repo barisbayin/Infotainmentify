@@ -5,7 +5,9 @@ using Core.Abstractions;
 using Core.Contracts;
 using Core.Entity;
 using Core.Enums;
+using Microsoft.EntityFrameworkCore;
 using Quartz;
+using System.Reflection;
 using TriggerBuilder = Quartz.TriggerBuilder;
 
 namespace Application.Services
@@ -51,42 +53,69 @@ namespace Application.Services
 
             return entity?.ToDetailDto();
         }
+
+        public async Task<JobSettingDetailDto?> GetNoUserAsync(int id, CancellationToken ct)
+        {
+            var entity = await _jobRepo.FirstOrDefaultAsync(
+                x => x.Id == id,
+                asNoTracking: false,
+                ct: ct);
+
+            return entity?.ToDetailDto();
+        }
+
         public Task<JobSetting?> GetEntityAsync(int id, CancellationToken ct)
         => _jobRepo.FirstOrDefaultAsync(
         x => x.AppUserId == _current.UserId && x.Id == id,
         asNoTracking: false,
         ct: ct);
 
+        public Task<JobSetting?> GetByIdNoUserAsync(int id, CancellationToken ct)
+        => _jobRepo.FirstOrDefaultAsync(x => x.Id == id, asNoTracking: false, ct: ct);
+
         public async Task<int> UpsertAsync(JobSettingDetailDto dto, CancellationToken ct)
         {
+            var userId = _current.UserId;
             JobSetting entity;
+
+            var profileTypeName = JobProfileMapper.GetProfileAssemblyQualifiedName(
+                Enum.Parse<JobType>(dto.JobType, true)
+            ) ?? throw new InvalidOperationException($"Profile eşlemesi bulunamadı: {dto.JobType}");
 
             if (dto.Id == 0)
             {
                 entity = new JobSetting
                 {
-                    AppUserId = _current.UserId,
+                    AppUserId = userId,
                     JobType = Enum.Parse<JobType>(dto.JobType, true),
                     Name = dto.Name.Trim(),
                     ProfileId = dto.ProfileId,
-                    ProfileType = dto.ProfileType,
+                    ProfileType = profileTypeName,
                     IsAutoRunEnabled = dto.IsAutoRunEnabled,
                     PeriodHours = dto.PeriodHours,
                     Status = JobStatus.Pending
                 };
-
                 await _jobRepo.AddAsync(entity, ct);
             }
             else
             {
                 entity = await _jobRepo.FirstOrDefaultAsync(
-                    x => x.AppUserId == _current.UserId && x.Id == dto.Id,
-                    asNoTracking: false,
-                    ct: ct
+                    x => x.AppUserId == userId && x.Id == dto.Id,
+                    asNoTracking: false, ct: ct
                 ) ?? throw new InvalidOperationException("Job bulunamadı.");
 
                 entity.JobType = Enum.Parse<JobType>(dto.JobType, true);
-                entity.UpdateFromDto(dto);
+                entity.Name = dto.Name.Trim();
+                entity.ProfileId = dto.ProfileId;
+                entity.ProfileType = profileTypeName;
+                entity.IsAutoRunEnabled = dto.IsAutoRunEnabled;
+                entity.PeriodHours = dto.PeriodHours;
+                entity.Status = Enum.TryParse<JobStatus>(dto.Status, true, out var parsed)
+                    ? parsed
+                    : JobStatus.Pending; // ✅ dönüşüm eklendi
+                entity.LastError = dto.LastError;
+                entity.LastRunAt = dto.LastRunAt;
+
                 _jobRepo.Update(entity);
             }
 
@@ -96,7 +125,9 @@ namespace Application.Services
             return entity.Id;
         }
 
-        private async Task RescheduleJobAsync(JobSetting job, CancellationToken ct)
+
+
+        public async Task RescheduleJobAsync(JobSetting job, CancellationToken ct)
         {
             var scheduler = await _schedulerFactory.GetScheduler(ct);
             var jobKey = new JobKey($"job_{job.Id}", "default");
@@ -126,15 +157,77 @@ namespace Application.Services
             Console.WriteLine($"[Quartz] Job planlandı → {job.Name} ({hours} saatte bir)");
         }
 
-        public async Task<object?> ResolveProfileAsync(JobSetting job, CancellationToken ct)
+        public async Task<List<JobSetting>> GetAutoRunJobsAsync(CancellationToken ct)
         {
-            var type = Type.GetType(job.ProfileType)
-                ?? throw new InvalidOperationException($"Profile tipi çözülemedi: {job.ProfileType}");
+            var list = await _jobRepo.FindAsync(
+                x => x.IsAutoRunEnabled && !x.Removed && x.IsActive && x.User.IsActive, 
+                include: q => q.Include(x => x.User),
+                asNoTracking: true,
+                ct: ct
+            );
 
+            return list.ToList();
+        }
+
+
+
+        public async Task<IJobProfile?> ResolveProfileAsync(JobSetting job, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(job.ProfileType))
+                throw new InvalidOperationException("ProfileType boş olamaz.");
+
+            string typeName = job.ProfileType.Split(',')[0].Trim(); // "Core.Entity.TopicGenerationProfile"
+            Type? type = Type.GetType(job.ProfileType, throwOnError: false);
+
+            if (type == null)
+            {
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies().ToList();
+
+                // 🔥 Core assembly yüklü değilse manuel yükle
+                if (!assemblies.Any(a => a.GetName().Name == "Core"))
+                {
+                    var corePath = Path.Combine(AppContext.BaseDirectory, "Core.dll");
+                    if (File.Exists(corePath))
+                    {
+                        try
+                        {
+                            var asm = Assembly.LoadFrom(corePath);
+                            assemblies.Add(asm);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"⚠️ Core.dll yüklenemedi: {ex.Message}");
+                        }
+                    }
+                }
+
+                // 🔍 Tüm assembly'lerde tara
+                type = assemblies
+                    .SelectMany(a =>
+                    {
+                        try { return a.GetTypes(); }
+                        catch { return Array.Empty<Type>(); }
+                    })
+                    .FirstOrDefault(t => t.FullName == typeName || t.Name == typeName);
+            }
+
+            if (type == null)
+                throw new InvalidOperationException($"Profile tipi çözülemedi: {job.ProfileType}");
+
+            // 🔄 EF üzerinden yükle
             var db = _uow.GetDbContext();
             var entity = await db.FindAsync(type, job.ProfileId, ct);
-            return entity;
+
+            if (entity is not IJobProfile profile)
+                throw new InvalidOperationException($"Profile '{type.Name}' IJobProfile arayüzünü implemente etmiyor.");
+
+            return profile;
         }
+
+
+
+
+
 
         /// <summary>
         /// Job siler ve Quartz’tan da kaldırır.
@@ -173,10 +266,20 @@ namespace Application.Services
             var jobKey = new JobKey($"job_{id}", "default");
 
             if (!await scheduler.CheckExists(jobKey, ct))
-                throw new InvalidOperationException("Job henüz planlanmamış veya devre dışı.");
+            {
+                var job = await _jobRepo.GetByIdAsync(id, asNoTracking: true, ct);
+                if (job is null)
+                    throw new InvalidOperationException("Job bulunamadı.");
+
+                var jobDetail = JobBuilder.Create<BaseQuartzJob>()
+                    .WithIdentity(jobKey)
+                    .UsingJobData("JobId", job.Id)
+                    .Build();
+
+                await scheduler.AddJob(jobDetail, true, true, ct);
+            }
 
             await scheduler.TriggerJob(jobKey, ct);
-            Console.WriteLine($"[Quartz] Manuel tetiklendi → job_{id}");
         }
 
         public async Task ToggleAutoRunAsync(int id, bool enable, CancellationToken ct)

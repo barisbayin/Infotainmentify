@@ -32,26 +32,56 @@ namespace Application.AiLayer
                 _model = model;
         }
 
-        public async Task<string> GenerateTextAsync(string prompt, double temperature = 0.7, string? model = null, CancellationToken ct = default)
+        public async Task<string> GenerateTextAsync(
+      string prompt,
+      double temperature = 0.7,
+      string? model = null,
+      CancellationToken ct = default)
         {
             var payload = new
             {
-                contents = new[] { new { role = "user", parts = new[] { new { text = prompt } } } },
+                contents = new[]
+                {
+            new
+            {
+                role = "user",
+                parts = new[] { new { text = prompt } }
+            }
+        },
                 generationConfig = new { temperature }
             };
 
-            var res = await _http.PostAsJsonAsync(
-                $"https://generativelanguage.googleapis.com/v1beta/models/{(model ?? _model)}:generateContent?key={_apiKey}",
-                payload, ct);
-
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{(model ?? _model)}:generateContent?key={_apiKey}";
+            var res = await _http.PostAsJsonAsync(url, payload, ct);
             var json = await res.Content.ReadAsStringAsync(ct);
-            if (!res.IsSuccessStatusCode)
-                throw new InvalidOperationException($"Gemini Error: {json}");
 
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.GetProperty("candidates")[0]
-                .GetProperty("content").GetProperty("parts")[0]
-                .GetProperty("text").GetString() ?? "";
+            // 🔥 Gemini API error handling
+            if (!res.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Gemini API Error ({res.StatusCode}): {json}");
+
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+
+                var candidate = doc.RootElement
+                    .GetProperty("candidates")[0]
+                    .GetProperty("content")
+                    .GetProperty("parts")[0]
+                    .GetProperty("text")
+                    .GetString();
+
+                if (string.IsNullOrWhiteSpace(candidate))
+                    throw new InvalidOperationException("Gemini boş yanıt döndürdü.");
+
+                // 🔥 Markdown temizliği
+                candidate = StripCodeFences(candidate);
+
+                return candidate.Trim();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Gemini response parse failed: {ex.Message}\nRaw: {json[..Math.Min(json.Length, 400)]}");
+            }
         }
 
         public async Task<IReadOnlyList<TopicResult>> GenerateTopicsAsync(
@@ -85,6 +115,23 @@ namespace Application.AiLayer
 
         public Task<bool> TestConnectionAsync(CancellationToken ct = default)
             => Task.FromResult(true);
+
+        private static string StripCodeFences(string s)
+        {
+            var txt = s.Trim();
+            if (txt.StartsWith("```"))
+            {
+                var i = txt.IndexOf('\n');
+                if (i > 0) txt = txt[(i + 1)..];
+                if (txt.EndsWith("```"))
+                {
+                    var last = txt.LastIndexOf("```", StringComparison.Ordinal);
+                    if (last >= 0) txt = txt[..last];
+                }
+            }
+            return txt.Trim();
+        }
+
     }
 
 }

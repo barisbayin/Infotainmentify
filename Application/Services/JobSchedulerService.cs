@@ -2,6 +2,7 @@
 using Core.Abstractions;
 using Core.Contracts;
 using Core.Entity;
+using Microsoft.EntityFrameworkCore;
 using Quartz;
 namespace Application.Services
 {
@@ -27,19 +28,31 @@ namespace Application.Services
         public async Task ScheduleAllAutoJobsAsync(CancellationToken ct)
         {
             var jobs = await _jobRepo.FindAsync(
-                x => x.AppUserId == _current.UserId && x.IsAutoRunEnabled,
+                x => x.IsAutoRunEnabled
+                  && !x.Removed
+                  && x.User.IsActive,   // 🔥 sadece aktif kullanıcıların jobları
+                include: q => q.Include(j => j.User),
                 asNoTracking: true,
                 ct: ct);
 
             foreach (var job in jobs)
                 await ScheduleJobAsync(job, ct);
+
+            Console.WriteLine($"[Quartz] {jobs.Count()} job yeniden planlandı (startup).");
         }
+
 
         /// <summary>
         /// Belirli bir job'u (örneğin güncellenmiş) yeniden planlar.
         /// </summary>
         public async Task RescheduleJobAsync(JobSetting job, CancellationToken ct)
         {
+            if (!job.IsAutoRunEnabled || !job.IsActive)
+            {
+                Console.WriteLine($"[Quartz] Job devre dışı → {job.Name}");
+                return;
+            }
+
             var scheduler = await _schedulerFactory.GetScheduler(ct);
             var jobKey = new JobKey($"job_{job.Id}", "default");
 

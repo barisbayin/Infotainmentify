@@ -1,9 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Core.Abstractions;
+using Core.Enums;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
-    public class TopicGenerationProfile : BaseEntity
+    public class TopicGenerationProfile : BaseEntity, IJobProfile
     {
         [Required]
         public int AppUserId { get; set; }
@@ -32,11 +34,22 @@ namespace Core.Entity
         [Column(TypeName = "nvarchar(max)")]
         public string RawResponseJson { get; set; } = null!; // AI'dan gelen orijinal JSON
 
-        public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;
+        public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.Now;
         public DateTimeOffset? CompletedAt { get; set; }
 
         [MaxLength(50)]
         public string Status { get; set; } = "Pending"; // Pending | Success | Failed
 
+        public JobType JobType => throw new NotImplementedException();
+
+        public IDictionary<string, object> ToParameters()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Validate()
+        {
+            throw new NotImplementedException();
+        }
     }
 }

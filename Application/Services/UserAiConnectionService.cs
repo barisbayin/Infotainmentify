@@ -158,5 +158,20 @@ namespace Application.Services
                 return new Dictionary<string, string>();
             }
         }
+
+        public async Task<UserAiConnection> GetActiveAsync(int id, CancellationToken ct)
+        {
+            var e = await _repo.GetByIdAsync(id, asNoTracking: true, ct)
+                ?? throw new InvalidOperationException("AI bağlantısı bulunamadı.");
+
+            if (e.UserId != _current.UserId)
+                throw new InvalidOperationException("Forbidden");
+
+            if (!e.IsActive)
+                throw new InvalidOperationException("AI bağlantısı pasif durumda, işlem yapılamaz.");
+
+            return e;
+        }
+
     }
 }

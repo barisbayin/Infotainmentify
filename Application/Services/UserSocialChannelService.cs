@@ -159,5 +159,21 @@ namespace Application.Services
                 return new Dictionary<string, object>();
             }
         }
+
+        public async Task<UserSocialChannel> GetActiveAsync(int id, CancellationToken ct)
+        {
+            var userId = RequireUser();
+            var e = await _repo.GetByIdAsync(id, asNoTracking: true, ct)
+                ?? throw new InvalidOperationException("Sosyal kanal bulunamadı.");
+
+            if (e.AppUserId != userId)
+                throw new InvalidOperationException("Forbidden");
+
+            if (!e.IsActive)
+                throw new InvalidOperationException("Bu sosyal kanal pasif durumda, işlem yapılamaz.");
+
+            return e;
+        }
+
     }
 }

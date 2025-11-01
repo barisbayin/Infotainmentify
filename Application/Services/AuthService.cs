@@ -72,9 +72,11 @@ namespace Application.Services
         {
             var key = login.Trim().ToLowerInvariant();
 
-            // Single fetch (asNoTracking: false -> hashing sonrası update gerekebilir)
+            // sadece aktif kullanıcılar login olabilir
             var user = await _repo.FirstOrDefaultAsync(
-                u => u.Email == key || u.Username == key, asNoTracking: false, ct: ct)
+                u => (u.Email == key || u.Username == key) && u.IsActive && !u.Removed,
+                asNoTracking: false,
+                ct: ct)
                 ?? throw new InvalidOperationException("Invalid credentials.");
 
             var res = _hasher.VerifyHashedPassword(user, user.PasswordHash, password);
@@ -94,6 +96,7 @@ namespace Application.Services
             var token = _jwt.CreateToken(user);
             return (user, token);
         }
+
 
         // Basit yardımcılar (PromptService stilinde)
         public Task<AppUser?> GetAsync(int id, CancellationToken ct)

@@ -21,6 +21,10 @@ namespace Infrastructure.Configurations
                    .HasColumnType("datetime2(0)")
                    .IsRequired(false);
 
+            builder.Property(e => e.IsActive)
+                    .HasColumnType("bit")
+                    .HasDefaultValue(true);
+
             // Soft delete alanları
             builder.Property(e => e.Removed)
                    .HasColumnType("bit")

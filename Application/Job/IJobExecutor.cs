@@ -1,4 +1,5 @@
-﻿using Core.Enums;
+﻿using Core.Abstractions;
+using Core.Enums;
 
 namespace Application.Job
 {

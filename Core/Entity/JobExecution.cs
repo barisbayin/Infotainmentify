@@ -17,10 +17,10 @@ namespace Core.Entity
         [Column(TypeName = "nvarchar(max)")]
         public string ResultJson { get; set; } = "{}";
 
-        [MaxLength(1000)]
+        [Column(TypeName = "nvarchar(max)")]
         public string? ErrorMessage { get; set; }
 
-        public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;
+        public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.Now;
         public DateTimeOffset? CompletedAt { get; set; }
     }
 }
