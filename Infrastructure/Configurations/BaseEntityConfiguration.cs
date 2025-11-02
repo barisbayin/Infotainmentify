@@ -14,7 +14,7 @@ namespace Infrastructure.Configurations
             // Timestamp'ler: SQL Server -> datetime2(0) + GETUTCDATE()
             builder.Property(e => e.CreatedAt)
                    .HasColumnType("datetime2(0)")
-                   .HasDefaultValueSql("GETUTCDATE()")
+                   .HasDefaultValueSql("GETDATE()")
                    .IsRequired();
 
             builder.Property(e => e.UpdatedAt)

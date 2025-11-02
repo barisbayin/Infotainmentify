@@ -1,6 +1,7 @@
 ﻿using Application.Contracts.Topics;
 using Core.Contracts;
 using Core.Entity;
+using Microsoft.EntityFrameworkCore;
 
 public class TopicService
 {
@@ -18,7 +19,7 @@ public class TopicService
         int userId, string? q, string? category, CancellationToken ct)
     {
         return _repo.FindAsync(
-            t =>
+            predicate: t =>
                 t.UserId == userId &&
                 (string.IsNullOrWhiteSpace(q)
                     || (t.TopicCode != null && t.TopicCode.Contains(q))
@@ -27,6 +28,7 @@ public class TopicService
                 (string.IsNullOrWhiteSpace(category) || t.Category == category),
             orderBy: t => t.Id,
             desc: true,
+            include: q => q.Include(t => t.Prompt), // ✅ Prompt dahil
             asNoTracking: true,
             ct: ct
         );

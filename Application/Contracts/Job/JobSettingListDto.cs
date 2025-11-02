@@ -12,5 +12,6 @@ namespace Application.Contracts.Job
         public string Status { get; set; } = default!;
         public DateTimeOffset? LastRunAt { get; set; }
         public string? LastError { get; set; }
+        public DateTimeOffset? LastErrorAt { get; set; }
     }
 }

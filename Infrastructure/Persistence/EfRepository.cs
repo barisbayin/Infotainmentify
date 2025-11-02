@@ -62,6 +62,35 @@ namespace Infrastructure.Persistence
         }
 
         public async Task<IReadOnlyList<TEntity>> FindAsync<TOrderKey>(
+             Expression<Func<TEntity, bool>> predicate,
+             Expression<Func<TEntity, TOrderKey>> orderBy,
+             bool desc = true,
+             Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? include = null,
+             bool asNoTracking = true,
+             CancellationToken ct = default)
+        {
+            IQueryable<TEntity> query = _dbSet;
+
+            // filtre
+            query = query.Where(predicate);
+
+            // include
+            if (include != null)
+                query = include(query);
+
+            // sıralama
+            query = desc ? query.OrderByDescending(orderBy) : query.OrderBy(orderBy);
+
+            // tracking opsiyonu
+            if (asNoTracking)
+                query = query.AsNoTracking();
+
+            return await query.ToListAsync(ct);
+        }
+
+
+
+        public async Task<IReadOnlyList<TEntity>> FindAsync<TOrderKey>(
     Expression<Func<TEntity, bool>> predicate,
     Expression<Func<TEntity, TOrderKey>> orderBy,
     bool desc = true,

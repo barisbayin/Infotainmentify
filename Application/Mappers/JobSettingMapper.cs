@@ -15,7 +15,8 @@ namespace Application.Mappers
                 PeriodHours = e.PeriodHours,
                 Status = e.Status.ToString(),
                 LastRunAt = e.LastRunAt,
-                LastError = e.LastError
+                LastError = e.LastError,
+                LastErrorAt = e.LastErrorAt
             };
 
         public static JobSettingDetailDto ToDetailDto(this JobSetting e)

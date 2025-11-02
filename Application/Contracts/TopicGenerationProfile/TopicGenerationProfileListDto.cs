@@ -3,6 +3,7 @@
     public sealed class TopicGenerationProfileListDto
     {
         public int Id { get; set; }
+        public string ProfileName { get; set; } = default!;
         public string ModelName { get; set; } = default!;
         public string? PromptName { get; set; }
         public string? AiProvider { get; set; }

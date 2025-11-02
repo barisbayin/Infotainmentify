@@ -2,7 +2,8 @@
 {
     public sealed class TopicGenerationProfileDetailDto
     {
-        public int Id { get; set; }                          // 0 => create, >0 => update
+        public int Id { get; set; }
+        public string ProfileName { get; set; } = default!;
         public int PromptId { get; set; }
         public int AiConnectionId { get; set; }
         public string ModelName { get; set; } = default!;

@@ -12,6 +12,11 @@ namespace Infrastructure.Configurations
 
             builder.ToTable("TopicGenerationProfiles");
 
+            builder.Property(x => x.ProfileName)
+            .IsRequired()
+            .HasMaxLength(50)
+            .HasColumnType("nvarchar(50)");
+
             builder.Property(x => x.AppUserId)
                    .IsRequired()
                    .HasColumnType("int");

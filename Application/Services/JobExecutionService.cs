@@ -61,54 +61,87 @@ namespace Application.Services
         /// </summary>
         public async Task<JobExecution> StartExecutionAsync(int jobId, CancellationToken ct)
         {
-            var entity = new JobExecution
+            // 🔹 JobSetting'i çekelim
+            var jobSetting = await _jobRepo.GetByIdAsync(jobId, false, ct);
+            if (jobSetting == null)
+                throw new InvalidOperationException($"JobSetting bulunamadı: {jobId}");
+
+            // 🔹 Yeni execution oluştur
+            var exec = new JobExecution
             {
                 JobId = jobId,
                 Status = JobStatus.Running,
                 StartedAt = DateTimeOffset.Now,
                 ResultJson = "{}"
             };
+            await _execRepo.AddAsync(exec, ct);
 
-            await _execRepo.AddAsync(entity, ct);
+            // 🔹 JobSetting güncelle
+            jobSetting.Status = JobStatus.Running;
+            jobSetting.LastRunAt = DateTimeOffset.Now;
+            jobSetting.LastError = null;        // Önceki hatayı temizle
+            jobSetting.LastErrorAt = null;
+
             await _uow.SaveChangesAsync(ct);
 
-            Console.WriteLine($"[JobExecution] Başlatıldı → JobId={jobId}, ExecId={entity.Id}");
-            return entity;
+            Console.WriteLine($"🚀 [JobExecution] Başlatıldı → JobId={jobId}, ExecId={exec.Id}");
+            return exec;
         }
+
 
         /// <summary>
         /// Job başarıyla tamamlandığında çağrılır.
         /// </summary>
         public async Task CompleteExecutionAsync(int execId, string resultMessage, CancellationToken ct)
         {
-            var entity = await _execRepo.GetByIdAsync(execId, false, ct);
-            if (entity == null) return;
+            var exec = await _execRepo.GetByIdAsync(execId, false, ct);
+            if (exec == null) return;
 
-            entity.Status = JobStatus.Success;
-            entity.CompletedAt = DateTimeOffset.Now;
-            entity.ResultJson = resultMessage;
+            exec.Status = JobStatus.Success;
+            exec.CompletedAt = DateTimeOffset.Now;
+            exec.ResultJson = resultMessage;
+
+            // İlişkili job setting'i bul
+            var setting = await _jobRepo.GetByIdAsync(exec.JobId, false, ct);
+            if (setting != null)
+            {
+                setting.LastRunAt = DateTimeOffset.Now;
+                setting.Status = JobStatus.Success; // genel durum güncelle
+            }
 
             await _uow.SaveChangesAsync(ct);
 
-            Console.WriteLine($"✅ [JobExecution] Tamamlandı → ExecId={execId}, Mesaj={resultMessage}");
+            Console.WriteLine($"✅ [JobExecution] Tamamlandı → ExecId={execId}, JobSettingId={exec.JobId}");
         }
+
 
         /// <summary>
         /// Job hata ile tamamlandığında çağrılır.
         /// </summary>
         public async Task FailExecutionAsync(int execId, string errorMessage, CancellationToken ct)
         {
-            var entity = await _execRepo.GetByIdAsync(execId, false, ct);
-            if (entity == null) return;
+            var exec = await _execRepo.GetByIdAsync(execId, false, ct);
+            if (exec == null) return;
 
-            entity.Status = JobStatus.Failed;
-            entity.CompletedAt = DateTimeOffset.Now;
-            entity.ErrorMessage = errorMessage;
+            exec.Status = JobStatus.Failed;
+            exec.CompletedAt = DateTimeOffset.Now;
+            exec.ErrorMessage = errorMessage;
+
+            // İlişkili job setting'i güncelle
+            var setting = await _jobRepo.GetByIdAsync(exec.JobId, false, ct);
+            if (setting != null)
+            {
+                setting.LastRunAt = DateTimeOffset.Now;
+                setting.LastError = errorMessage;
+                setting.LastErrorAt = DateTimeOffset.Now;
+                setting.Status = JobStatus.Failed;
+            }
 
             await _uow.SaveChangesAsync(ct);
 
-            Console.WriteLine($"❌ [JobExecution] Hata → ExecId={execId}, Hata={errorMessage}");
+            Console.WriteLine($"❌ [JobExecution] Hata → ExecId={execId}, JobSettingId={exec.JobId}, Hata={errorMessage}");
         }
+
     }
 }
 

@@ -33,5 +33,8 @@ namespace Core.Entity
 
         [MaxLength(1000)]
         public string? LastError { get; set; }
+
+        public DateTimeOffset? LastErrorAt { get; set; }
     }
+
 }

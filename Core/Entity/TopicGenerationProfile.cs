@@ -27,6 +27,10 @@ namespace Core.Entity
 
         [Required]
         [MaxLength(50)]
+        public string ProfileName { get; set; } = null!; // örn: gpt-4-turbo, gemini-1.5-pro
+
+        [Required]
+        [MaxLength(50)]
         public string ModelName { get; set; } = null!; // örn: gpt-4-turbo, gemini-1.5-pro
 
         public int RequestedCount { get; set; } // kaç topic istenmişti (örn: 30)

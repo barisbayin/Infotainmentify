@@ -9,6 +9,7 @@ namespace Application.Mappers
             => new()
             {
                 Id = e.Id,
+                ProfileName = e.ProfileName,
                 ModelName = e.ModelName,
                 PromptName = e.Prompt?.Name,
                 AiProvider = e.AiConnection?.Name,
@@ -22,6 +23,7 @@ namespace Application.Mappers
             => new()
             {
                 Id = e.Id,
+                ProfileName= e.ProfileName,
                 PromptId = e.PromptId,
                 AiConnectionId = e.AiConnectionId,
                 ModelName = e.ModelName,

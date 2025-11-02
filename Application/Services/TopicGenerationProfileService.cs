@@ -60,6 +60,7 @@ namespace Application.Services
                     p.AppUserId == userId &&
                     p.PromptId == dto.PromptId &&
                     p.AiConnectionId == dto.AiConnectionId &&
+                    p.ProfileName == dto.ProfileName &&
                     p.ModelName == modelName, ct);
 
                 if (exists)
@@ -67,6 +68,7 @@ namespace Application.Services
 
                 var e = new TopicGenerationProfile
                 {
+                    ProfileName = dto.ProfileName,
                     AppUserId = userId,
                     PromptId = dto.PromptId,
                     AiConnectionId = dto.AiConnectionId,
@@ -101,12 +103,14 @@ namespace Application.Services
                         p.PromptId == dto.PromptId &&
                         p.AiConnectionId == dto.AiConnectionId &&
                         p.ModelName == modelName &&
+                        p.ProfileName == dto.ProfileName &&
                         p.Id != dto.Id, ct);
 
                     if (clash)
                         throw new InvalidOperationException("Bu kombinasyonda başka bir profil zaten mevcut.");
                 }
 
+                e.ProfileName = dto.ProfileName;
                 e.PromptId = dto.PromptId;
                 e.AiConnectionId = dto.AiConnectionId;
                 e.ModelName = modelName;
