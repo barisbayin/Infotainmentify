@@ -10,7 +10,7 @@ namespace Application.AiLayer
         private readonly HttpClient _http;
         private IReadOnlyDictionary<string, string>? _creds;
         private string _apiKey = string.Empty;
-        private string _model = "gemini-1.5-flash";
+        private string _model = "gemini-2.5-flash";
 
         public AiProviderType ProviderType => AiProviderType.GoogleVertex;
 
@@ -92,7 +92,7 @@ namespace Application.AiLayer
             double temperature = 0.7,
             CancellationToken ct = default)
         {
-            var fullPrompt = $"{systemPrompt}\n\n{userPrompt}\n\nReturn a valid JSON array of {count} objects.";
+            var fullPrompt = $"{systemPrompt}\n\n{userPrompt}";
             var result = await GenerateTextAsync(fullPrompt, temperature, model ?? _model, ct);
 
             try

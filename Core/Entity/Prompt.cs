@@ -22,5 +22,7 @@ namespace Core.Entity
 
         [Required]                     // Prompt şablonu (örn. Scriban/Plain)
         public string Body { get; set; } = default!;
+
+        public string? SystemPrompt { get; set; }
     }
 }

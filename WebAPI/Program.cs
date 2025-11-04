@@ -118,21 +118,39 @@ namespace WebAPI
 
             const string CorsPolicy = "InfotainmentifyCors";
 
-            // 1) CORS'u kaydet
-            builder.Services.AddCors(opt =>
+            builder.Services.AddCors(options =>
             {
-                opt.AddPolicy(CorsPolicy, p =>
-                    p.WithOrigins(
-                         "http://localhost:5173",  // Vite default
-                         "https://localhost:5173",
-                         "http://127.0.0.1:5173",
-                         "https://127.0.0.1:5173"
-                    )
-                    .AllowAnyMethod()
-                    .AllowAnyHeader()
-                    // .WithExposedHeaders("X-Total-Count") // sayfalama vs. gerekiyorsa
-                    .SetPreflightMaxAge(TimeSpan.FromHours(12))
-                );
+                if (builder.Environment.IsDevelopment())
+                {
+                    // ?? Development ortamý (localhost)
+                    options.AddPolicy(CorsPolicy, policy =>
+                        policy.WithOrigins(
+                            "http://localhost:5173",
+                            "https://localhost:5173",
+                            "http://127.0.0.1:5173",
+                            "https://127.0.0.1:5173"
+                        )
+                        .AllowAnyMethod()
+                        .AllowAnyHeader()
+                        .AllowCredentials()
+                        .SetPreflightMaxAge(TimeSpan.FromHours(12))
+                    );
+                }
+                else
+                {
+                    // ?? Production ortamý (canlý)
+                    options.AddPolicy(CorsPolicy, policy =>
+                        policy.WithOrigins(
+                            "https://moduleer.com",           // frontend ana domain
+                            "https://www.moduleer.com"        // www varsa
+                                                              // ,"https://test.moduleer.com"    // staging varsa
+                        )
+                        .AllowAnyMethod()
+                        .AllowAnyHeader()
+                        .AllowCredentials()
+                        .SetPreflightMaxAge(TimeSpan.FromHours(12))
+                    );
+                }
             });
 
 

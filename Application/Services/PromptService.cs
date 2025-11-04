@@ -49,7 +49,8 @@ namespace Application.Services
                     Language = dto.Language?.Trim(),
                     Description = dto.Description,
                     IsActive = dto.IsActive,
-                    Body = dto.Body
+                    Body = dto.Body,
+                    SystemPrompt = dto.SystemPrompt
                 };
                 await _repo.AddAsync(e, ct);
                 await _uow.SaveChangesAsync(ct);
@@ -72,6 +73,7 @@ namespace Application.Services
                 e.Description = dto.Description;
                 e.IsActive = dto.IsActive;
                 e.Body = dto.Body;
+                e.SystemPrompt = dto.SystemPrompt;
 
                 _repo.Update(e);
                 await _uow.SaveChangesAsync(ct);

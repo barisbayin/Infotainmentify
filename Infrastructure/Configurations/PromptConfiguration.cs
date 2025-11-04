@@ -38,7 +38,13 @@ namespace Infrastructure.Configurations
             builder.Property(p => p.Body)
                    .IsRequired()
                    .HasColumnType("nvarchar(max)");
-            builder.Property(x => x.Description).HasMaxLength(1000);
+
+            builder.Property(x => x.Description)
+                    .HasMaxLength(1000);
+
+            builder.Property(p => p.SystemPrompt)
+                   .HasColumnType("nvarchar(max)");
+
 
             // Faydalı indeksler
             builder.HasIndex(p => p.Name);

@@ -24,7 +24,8 @@ namespace Application.Contracts.Mappers
             Language = e.Language,
             Description = e.Description,
             IsActive = e.IsActive,
-            Body = e.Body
+            Body = e.Body,
+            SystemPrompt = e.SystemPrompt
         };
     }
 }

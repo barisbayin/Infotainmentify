@@ -73,7 +73,7 @@ namespace Application.Services
             var temperature = (double)(aiConn.Temperature ?? 0.8M);
 
             var topics = await generator.GenerateTopicsAsync(
-                systemPrompt: prompt.Name,
+                systemPrompt: prompt.SystemPrompt ?? string.Empty,
                 userPrompt: prompt.Body,
                 count: profile.RequestedCount,
                 model: creds.GetValueOrDefault("model", aiConn.TextModel),
@@ -104,8 +104,5 @@ namespace Application.Services
 
             return $"{entities.Count} adet konu başarıyla üretildi.";
         }
-
-
     }
-
 }
