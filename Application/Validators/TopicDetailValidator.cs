@@ -27,11 +27,6 @@ namespace Application.Validators
             RuleFor(x => x.PotentialVisual)
                 .MaximumLength(256);
 
-            RuleFor(x => x.TagsJson)
-                .Must(BeValidJson)
-                .When(x => !string.IsNullOrWhiteSpace(x.TagsJson))
-                .WithMessage("TagsJson geçerli bir JSON olmalıdır.");
-
             RuleFor(x => x.TopicJson)
                 .Must(BeValidJson)
                 .When(x => !string.IsNullOrWhiteSpace(x.TopicJson))

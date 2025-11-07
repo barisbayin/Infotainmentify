@@ -1,4 +1,4 @@
-﻿using Application.Contracts.TopicGenerationProfile;
+﻿using Application.Contracts.Topics;
 using Core.Entity;
 
 namespace Application.Mappers
@@ -23,7 +23,7 @@ namespace Application.Mappers
             => new()
             {
                 Id = e.Id,
-                ProfileName= e.ProfileName,
+                ProfileName = e.ProfileName,
                 PromptId = e.PromptId,
                 AiConnectionId = e.AiConnectionId,
                 ModelName = e.ModelName,

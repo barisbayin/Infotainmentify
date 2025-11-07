@@ -59,6 +59,9 @@ namespace WebAPI
             builder.Services.AddScoped<JobSettingService>();
             builder.Services.AddScoped<JobExecutionService>();
             builder.Services.AddScoped<TopicGenerationService>();
+            builder.Services.AddScoped<ScriptGenerationService>();
+            builder.Services.AddScoped<ScriptService>();
+            builder.Services.AddScoped<ScriptGenerationProfileService>();
             builder.Services.AddScoped<JobExecutorFactory>();
             //builder.Services.AddScoped<TopicGenerationService>();
 

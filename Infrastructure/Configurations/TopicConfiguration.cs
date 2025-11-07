@@ -4,65 +4,81 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Infrastructure.Configurations
 {
-    public class TopicConfiguration : IEntityTypeConfiguration<Topic>
+    /// <summary>
+    /// Topic entity configuration
+    /// İçerik üretim pipeline'ının çekirdeği.
+    /// </summary>
+    public class TopicConfiguration : BaseEntityConfiguration<Topic>
     {
-        public void Configure(EntityTypeBuilder<Topic> builder)
+        public override void Configure(EntityTypeBuilder<Topic> builder)
         {
+            base.Configure(builder);
             builder.ToTable("Topics");
 
-            builder.HasKey(t => t.Id);
+            // 🔹 Unique Code
+            builder.HasIndex(e => e.TopicCode).IsUnique();
 
-            builder.Property(p => p.UserId)
-                   .IsRequired()
-                   .HasColumnType("int");
+            // 🔹 Alan uzunlukları
+            builder.Property(e => e.TopicCode)
+                .HasMaxLength(64)
+                .IsRequired();
 
-            builder.Property(t => t.TopicCode)
-                   .IsRequired()
-                   .HasMaxLength(64)
-                   .HasColumnType("nvarchar(64)");
+            builder.Property(e => e.Category)
+                .HasMaxLength(64);
 
-            builder.Property(t => t.Category)
-                   .HasMaxLength(64)
-                   .HasColumnType("nvarchar(64)");
+            builder.Property(e => e.SubCategory)
+                .HasMaxLength(128);
 
-            builder.Property(t => t.PremiseTr)
-                   .HasColumnType("nvarchar(max)");
+            builder.Property(e => e.Series)
+                .HasMaxLength(128);
 
-            builder.Property(t => t.Premise)
-                   .HasColumnType("nvarchar(max)");
+            builder.Property(e => e.Tone)
+                .HasMaxLength(32);
 
-            builder.Property(t => t.Tone)
-                   .HasMaxLength(32)
-                   .HasColumnType("nvarchar(32)");
+            builder.Property(e => e.PotentialVisual)
+                .HasMaxLength(500);
 
-            builder.Property(t => t.PotentialVisual)
-                   .HasColumnType("nvarchar(max)");
+            builder.Property(e => e.RenderStyle)
+                .HasMaxLength(64);
 
-            builder.Property(t => t.NeedsFootage)
-                   .HasColumnType("bit")
-                   .HasDefaultValue(false);
+            builder.Property(e => e.VoiceHint)
+                .HasMaxLength(64);
 
-            builder.Property(t => t.FactCheck)
-                   .HasColumnType("bit")
-                   .HasDefaultValue(false);
+            builder.Property(e => e.ScriptHint)
+                .HasMaxLength(64);
 
-            builder.Property(t => t.TagsJson)
-                   .HasColumnType("nvarchar(max)");
+            // 🔹 JSON alanı
+            builder.Property(e => e.TopicJson)
+                .HasColumnType("nvarchar(max)");
 
-            builder.Property(t => t.TopicJson)
-                   .HasColumnType("nvarchar(max)");
+            // 🔹 Bayraklar
+            builder.Property(e => e.NeedsFootage)
+                .HasDefaultValue(false);
 
-            // İlişki: Topic → Prompt (opsiyonel), Prompt silinirse NULL’a çek
-            builder.HasOne(t => t.Prompt)
-                   .WithMany()
-                   .HasForeignKey(t => t.PromptId)
-                   .OnDelete(DeleteBehavior.SetNull);
+            builder.Property(e => e.FactCheck)
+                .HasDefaultValue(false);
 
-            // Indexler
-            builder.HasIndex(x => new { x.UserId, x.TopicCode }).IsUnique();
-            builder.HasIndex(t => t.TopicCode).IsUnique();
-            builder.HasIndex(t => t.Category);
-            builder.HasIndex(t => t.PromptId);
+            builder.Property(e => e.ScriptGenerated)
+                .HasDefaultValue(false);
+
+            // 🔹 İlişkiler
+            builder.HasOne(e => e.Prompt)
+                .WithMany()
+                .HasForeignKey(e => e.PromptId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.HasOne(e => e.Script)
+                .WithMany()
+                .HasForeignKey(e => e.ScriptId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // 🔹 Zaman alanları
+            builder.Property(e => e.ScriptGeneratedAt)
+                .HasColumnType("datetimeoffset");
+
+            // 🔹 Priority varsayılan değeri
+            builder.Property(e => e.Priority)
+                .HasDefaultValue(5);
         }
     }
 }

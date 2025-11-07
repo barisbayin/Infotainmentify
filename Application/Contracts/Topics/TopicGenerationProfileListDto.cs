@@ -1,4 +1,4 @@
-﻿namespace Application.Contracts.TopicGenerationProfile
+﻿namespace Application.Contracts.Topics
 {
     public sealed class TopicGenerationProfileListDto
     {

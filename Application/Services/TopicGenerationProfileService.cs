@@ -1,7 +1,6 @@
-﻿using Application.Contracts.TopicGenerationProfile;
+﻿using Application.Contracts.Topics;
 using Core.Contracts;
 using Core.Entity;
-using Microsoft.EntityFrameworkCore;
 
 
 namespace Application.Services

@@ -150,6 +150,11 @@ namespace Application.AiLayer
 
         public Task<bool> TestConnectionAsync(CancellationToken ct = default)
             => Task.FromResult(true);
+
+        public Task<IReadOnlyList<TopicResult>> GenerateTopicsAsync(TopicGenerationRequest request, CancellationToken ct = default)
+        {
+            throw new NotImplementedException();
+        }
     }
 
 

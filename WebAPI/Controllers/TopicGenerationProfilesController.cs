@@ -1,9 +1,9 @@
-﻿using Application.Contracts.TopicGenerationProfile;
-using Application.Services;
+﻿using Application.Services;
 using Core.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Application.Mappers;
+using Application.Contracts.Topics;
 
 namespace WebAPI.Controllers
 {

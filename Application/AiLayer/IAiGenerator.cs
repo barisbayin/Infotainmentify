@@ -3,43 +3,57 @@ using Core.Enums;
 
 namespace Application.AiLayer
 {
+    /// <summary>
+    /// Ortak AI sağlayıcı arabirimi (OpenAI, Gemini, Anthropic vb.)
+    /// </summary>
     public interface IAiGenerator
     {
+        // 🔹 Sağlayıcı tipi (örnek: GoogleVertex, OpenAi)
         AiProviderType ProviderType { get; }
 
-        // 🔹 Credential initialization (runtime)
+        // 🔹 Credential bilgilerini runtime’da initialize eder
         void Initialize(IReadOnlyDictionary<string, string> credentials);
 
-        // --- Text / Topic Üretimi ---
+        // -------------------------------
+        // 🧠 Metin Üretimi
+        // -------------------------------
+
+        /// <summary>
+        /// Basit text üretimi (tek prompt).
+        /// </summary>
         Task<string> GenerateTextAsync(
             string prompt,
             double temperature = 0.7,
             string? model = null,
             CancellationToken ct = default);
 
-        // Topic-specific structured JSON üretimi
+        /// <summary>
+        /// Yapılandırılmış topic üretimi (structured JSON output).
+        /// </summary>
         Task<IReadOnlyList<TopicResult>> GenerateTopicsAsync(
-            string systemPrompt,
-            string userPrompt,
-            int count,
-            string? model = null,
-            double temperature = 0.7,
+            TopicGenerationRequest request,
             CancellationToken ct = default);
 
-        // --- Görsel Üretimi ---
+        // -------------------------------
+        // 🎨 Görsel Üretimi
+        // -------------------------------
         Task<byte[]> GenerateImageAsync(
             string prompt,
             string size = "1024x1024",
             string? style = null,
             CancellationToken ct = default);
 
-        // --- Embedding ---
+        // -------------------------------
+        // 🔤 Embedding (vektör temsili)
+        // -------------------------------
         Task<float[]> GetEmbeddingAsync(
             string text,
             string? model = null,
             CancellationToken ct = default);
 
-        // --- Health check / credit info ---
+        // -------------------------------
+        // 💚 Health Check
+        // -------------------------------
         Task<bool> TestConnectionAsync(CancellationToken ct = default);
     }
 }

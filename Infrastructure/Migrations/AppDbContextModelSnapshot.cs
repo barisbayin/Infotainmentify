@@ -300,6 +300,166 @@ namespace Infrastructure.Migrations
                     b.ToTable("Prompts", (string)null);
                 });
 
+            modelBuilder.Entity("Core.Entity.Script", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("MetaJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Removed")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ScriptJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("TopicId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TopicId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Scripts", (string)null);
+                });
+
+            modelBuilder.Entity("Core.Entity.ScriptGenerationProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AiConnectionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ConfigJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Language")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasDefaultValue("en");
+
+                    b.Property<string>("ModelName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ProductionType")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ProfileName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("PromptId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RawResponseJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Removed")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RenderStyle")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<double>("Temperature")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("float")
+                        .HasDefaultValue(0.80000000000000004);
+
+                    b.Property<int?>("TopicGenerationProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TopicIdsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AiConnectionId");
+
+                    b.HasIndex("AppUserId");
+
+                    b.HasIndex("PromptId");
+
+                    b.HasIndex("TopicGenerationProfileId");
+
+                    b.ToTable("ScriptGenerationProfiles", (string)null);
+                });
+
             modelBuilder.Entity("Core.Entity.Topic", b =>
                 {
                     b.Property<int>("Id")
@@ -313,7 +473,9 @@ namespace Infrastructure.Migrations
                         .HasColumnType("nvarchar(64)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2(0)")
+                        .HasDefaultValueSql("GETDATE()");
 
                     b.Property<bool>("FactCheck")
                         .ValueGeneratedOnAdd()
@@ -321,7 +483,9 @@ namespace Infrastructure.Migrations
                         .HasDefaultValue(false);
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("NeedsFootage")
                         .ValueGeneratedOnAdd()
@@ -329,7 +493,8 @@ namespace Infrastructure.Migrations
                         .HasDefaultValue(false);
 
                     b.Property<string>("PotentialVisual")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("Premise")
                         .HasColumnType("nvarchar(max)");
@@ -337,17 +502,48 @@ namespace Infrastructure.Migrations
                     b.Property<string>("PremiseTr")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(5);
+
                     b.Property<int?>("PromptId")
                         .HasColumnType("int");
 
                     b.Property<bool>("Removed")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime?>("RemovedAt")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("datetime2(0)");
 
-                    b.Property<string>("TagsJson")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<string>("RenderStyle")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<bool>("ScriptGenerated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTimeOffset?>("ScriptGeneratedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ScriptHint")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int?>("ScriptId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Series")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("SubCategory")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
 
                     b.Property<string>("Tone")
                         .HasMaxLength(32)
@@ -362,21 +558,26 @@ namespace Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("datetime2(0)");
 
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("VoiceHint")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Category");
+                    b.HasIndex("CreatedAt");
 
                     b.HasIndex("PromptId");
 
-                    b.HasIndex("TopicCode")
-                        .IsUnique();
+                    b.HasIndex("Removed");
 
-                    b.HasIndex("UserId", "TopicCode")
+                    b.HasIndex("ScriptId");
+
+                    b.HasIndex("TopicCode")
                         .IsUnique();
 
                     b.ToTable("Topics", (string)null);
@@ -414,6 +615,10 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("ProductionType")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<string>("ProfileName")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -433,6 +638,10 @@ namespace Infrastructure.Migrations
 
                     b.Property<DateTime?>("RemovedAt")
                         .HasColumnType("datetime2(0)");
+
+                    b.Property<string>("RenderStyle")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<int>("RequestedCount")
                         .HasColumnType("int");
@@ -617,6 +826,59 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Core.Entity.Script", b =>
+                {
+                    b.HasOne("Core.Entity.Topic", "Topic")
+                        .WithMany()
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Topic");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Core.Entity.ScriptGenerationProfile", b =>
+                {
+                    b.HasOne("Core.Entity.UserAiConnection", "AiConnection")
+                        .WithMany()
+                        .HasForeignKey("AiConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.Prompt", "Prompt")
+                        .WithMany()
+                        .HasForeignKey("PromptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.TopicGenerationProfile", "TopicGenerationProfile")
+                        .WithMany()
+                        .HasForeignKey("TopicGenerationProfileId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AiConnection");
+
+                    b.Navigation("Prompt");
+
+                    b.Navigation("TopicGenerationProfile");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Core.Entity.Topic", b =>
                 {
                     b.HasOne("Core.Entity.Prompt", "Prompt")
@@ -624,7 +886,14 @@ namespace Infrastructure.Migrations
                         .HasForeignKey("PromptId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Core.Entity.Script", "Script")
+                        .WithMany()
+                        .HasForeignKey("ScriptId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Prompt");
+
+                    b.Navigation("Script");
                 });
 
             modelBuilder.Entity("Core.Entity.TopicGenerationProfile", b =>

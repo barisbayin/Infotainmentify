@@ -38,6 +38,11 @@ namespace Core.Entity
         [Column(TypeName = "nvarchar(max)")]
         public string RawResponseJson { get; set; } = null!; // AI'dan gelen orijinal JSON
 
+        [MaxLength(50)]
+        public string? ProductionType { get; set; }   // örn: "shorts", "infotainment", "horror"
+        [MaxLength(50)]
+        public string? RenderStyle { get; set; }      // örn: "cinematic", "handdrawn"
+
         public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.Now;
         public DateTimeOffset? CompletedAt { get; set; }
 

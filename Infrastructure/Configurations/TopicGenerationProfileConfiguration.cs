@@ -52,6 +52,12 @@ namespace Infrastructure.Configurations
                    .HasColumnType("nvarchar(50)")
                    .HasDefaultValue("Pending");
 
+            builder.Property(e => e.ProductionType)
+                   .HasMaxLength(32);
+
+            builder.Property(e => e.RenderStyle)
+                   .HasMaxLength(64);
+
             // ilişkiler
             builder.HasOne(x => x.User)
                    .WithMany()

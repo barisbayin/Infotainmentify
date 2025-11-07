@@ -5,37 +5,49 @@ namespace Application.Contracts.Mappers
 {
     public static class TopicMapper
     {
+        // -------------------- LIST DTO --------------------
         public static TopicListDto ToListDto(this Topic e) => new()
         {
             Id = e.Id,
-            TopicCode = e.TopicCode,
             Category = e.Category,
+            SubCategory = e.SubCategory,
             Tone = e.Tone,
-            NeedsFootage = e.NeedsFootage,
-            FactCheck = e.FactCheck,
-            IsActive = e.IsActive,
-            UpdatedAt = e.UpdatedAt,
-            PromptId = e.PromptId,
-            PromptTitle = e.Prompt?.Name, // Prompt navigation varsa
+            Premise = e.Premise,
             PremiseTr = e.PremiseTr,
-            Premise = e.Premise
+            ScriptGenerated = e.ScriptGenerated,
+            IsActive = e.IsActive,
+            PromptId = e.PromptId,
+            PromptName = e.Prompt?.Name,
+            UpdatedAt = e.UpdatedAt
         };
 
+        // -------------------- DETAIL DTO --------------------
         public static TopicDetailDto ToDetailDto(this Topic e) => new()
         {
             Id = e.Id,
             TopicCode = e.TopicCode,
             Category = e.Category,
-            PremiseTr = e.PremiseTr,
+            SubCategory = e.SubCategory,
+            Series = e.Series,
             Premise = e.Premise,
+            PremiseTr = e.PremiseTr,
             Tone = e.Tone,
             PotentialVisual = e.PotentialVisual,
-            NeedsFootage = e.NeedsFootage,
+            RenderStyle = e.RenderStyle,
+            VoiceHint = e.VoiceHint,
+            ScriptHint = e.ScriptHint,
             FactCheck = e.FactCheck,
-            TagsJson = e.TagsJson,
+            NeedsFootage = e.NeedsFootage,
+            Priority = e.Priority,
             TopicJson = e.TopicJson,
+            ScriptGenerated = e.ScriptGenerated,
+            ScriptGeneratedAt = e.ScriptGeneratedAt,
             PromptId = e.PromptId,
-            IsActive = e.IsActive
+            PromptName = e.Prompt?.Name,
+            ScriptId = e.ScriptId,
+            ScriptTitle = e.Script?.Title,
+            IsActive = e.IsActive,
+            UpdatedAt = e.UpdatedAt
         };
     }
 }
