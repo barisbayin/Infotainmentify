@@ -28,6 +28,7 @@
         public string? TopicJson { get; set; }
 
         // ---- Üretim Durumu ----
+        public bool AllowScriptGeneration { get; set; }
         public bool ScriptGenerated { get; set; }
         public DateTimeOffset? ScriptGeneratedAt { get; set; }
 

@@ -155,6 +155,11 @@ namespace Application.AiLayer
         {
             throw new NotImplementedException();
         }
+
+        public Task<IReadOnlyList<ScriptResult>> GenerateScriptsAsync(ScriptGenerationRequest request, CancellationToken ct = default)
+        {
+            throw new NotImplementedException();
+        }
     }
 
 

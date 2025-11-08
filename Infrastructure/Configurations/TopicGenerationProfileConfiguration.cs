@@ -4,80 +4,70 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Infrastructure.Configurations
 {
-    public class TopicGenerationProfileConfiguration : BaseEntityConfiguration<TopicGenerationProfile>, IEntityTypeConfiguration<TopicGenerationProfile>
+    public class TopicGenerationProfileConfiguration : BaseEntityConfiguration<TopicGenerationProfile>
     {
         public override void Configure(EntityTypeBuilder<TopicGenerationProfile> builder)
         {
             base.Configure(builder);
-
             builder.ToTable("TopicGenerationProfiles");
 
-            builder.Property(x => x.ProfileName)
-            .IsRequired()
-            .HasMaxLength(50)
-            .HasColumnType("nvarchar(50)");
+            // 🔹 Alan uzunlukları
+            builder.Property(e => e.ProfileName)
+                .HasMaxLength(100)
+                .IsRequired();
 
-            builder.Property(x => x.AppUserId)
-                   .IsRequired()
-                   .HasColumnType("int");
+            builder.Property(e => e.ModelName)
+                .HasMaxLength(100)
+                .IsRequired();
 
-            builder.Property(x => x.PromptId)
-                   .IsRequired()
-                   .HasColumnType("int");
-
-            builder.Property(x => x.AiConnectionId)
-                   .IsRequired()
-                   .HasColumnType("int");
-
-            builder.Property(x => x.ModelName)
-                   .IsRequired()
-                   .HasMaxLength(50)
-                   .HasColumnType("nvarchar(50)");
-
-            builder.Property(x => x.RequestedCount)
-                   .HasColumnType("int");
-
-            builder.Property(x => x.RawResponseJson)
-                   .HasColumnType("nvarchar(max)");
-
-            builder.Property(x => x.StartedAt)
-                   .IsRequired()
-                   .HasColumnType("datetimeoffset");
-
-            builder.Property(x => x.CompletedAt)
-                   .HasColumnType("datetimeoffset");
-
-            builder.Property(x => x.Status)
-                   .HasMaxLength(50)
-                   .HasColumnType("nvarchar(50)")
-                   .HasDefaultValue("Pending");
+            builder.Property(e => e.Language)
+                .HasMaxLength(10)
+                .HasDefaultValue("en")
+                .IsRequired();
 
             builder.Property(e => e.ProductionType)
-                   .HasMaxLength(32);
+                .HasMaxLength(50);
 
             builder.Property(e => e.RenderStyle)
-                   .HasMaxLength(64);
+                .HasMaxLength(50);
 
-            // ilişkiler
-            builder.HasOne(x => x.User)
-                   .WithMany()
-                   .HasForeignKey(x => x.AppUserId)
-                   .OnDelete(DeleteBehavior.Cascade);
+            builder.Property(e => e.OutputMode)
+                .HasMaxLength(20)
+                .HasDefaultValue("Topic")
+                .IsRequired();
 
-            builder.HasOne(x => x.Prompt)
-                   .WithMany()
-                   .HasForeignKey(x => x.PromptId)
-                   .OnDelete(DeleteBehavior.Restrict);
+            // 🔹 Sayısal alanlar
+            builder.Property(e => e.RequestedCount)
+                .HasDefaultValue(30);
 
-            builder.HasOne(x => x.AiConnection)
-                   .WithMany()
-                   .HasForeignKey(x => x.AiConnectionId)
-                   .OnDelete(DeleteBehavior.Restrict);
+            builder.Property(e => e.Temperature)
+                .HasDefaultValue(0.7f);
 
-            // indeksler
-            builder.HasIndex(x => x.AppUserId);
-            builder.HasIndex(x => x.Status);
-            builder.HasIndex(x => x.StartedAt);
+            // 🔹 JSON ve bayraklar
+            builder.Property(e => e.TagsJson)
+                .HasColumnType("nvarchar(max)");
+
+            builder.Property(e => e.IsPublic)
+                .HasDefaultValue(false);
+
+            builder.Property(e => e.AllowRetry)
+                .HasDefaultValue(true);
+
+            // 🔹 İlişkiler
+            builder.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.AppUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(e => e.Prompt)
+                .WithMany()
+                .HasForeignKey(e => e.PromptId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(e => e.AiConnection)
+                .WithMany()
+                .HasForeignKey(e => e.AiConnectionId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

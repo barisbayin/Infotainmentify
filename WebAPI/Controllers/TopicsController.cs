@@ -72,5 +72,12 @@ namespace WebAPI.Controllers
             await _svc.ToggleActiveAsync(_current.UserId, id, isActive, ct);
             return Ok(new { id, isActive });
         }
+
+        [HttpPut("{id:int}/allow-script")]
+        public async Task<IActionResult> SetAllowScript(int id, [FromBody] bool allow, CancellationToken ct)
+        {
+            await _svc.ToggleAllowScriptGenerationAsync(_current.UserId, id, allow, ct);
+            return Ok(new { Id = id, AllowScriptGeneration = allow });
+        }
     }
 }

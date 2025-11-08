@@ -76,6 +76,9 @@ namespace Infrastructure.Configurations
             builder.Property(e => e.ScriptGeneratedAt)
                 .HasColumnType("datetimeoffset");
 
+            builder.Property(e => e.AllowScriptGeneration)
+                .HasDefaultValue(true); // ✅ varsayılan olarak açık
+
             // 🔹 Priority varsayılan değeri
             builder.Property(e => e.Priority)
                 .HasDefaultValue(5);

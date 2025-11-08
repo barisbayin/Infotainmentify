@@ -21,6 +21,9 @@ namespace WebAPI.Controllers
         }
 
         // ---------------- LIST ----------------
+        /// <summary>
+        /// Kullanıcının script listesini döner (isteğe göre topicId ve arama filtresi uygulanır)
+        /// </summary>
         [HttpGet]
         public async Task<IActionResult> List(
             [FromQuery] int? topicId,
@@ -32,43 +35,50 @@ namespace WebAPI.Controllers
         }
 
         // ---------------- GET ----------------
+        /// <summary>
+        /// Belirli bir script detayını döner
+        /// </summary>
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id, CancellationToken ct)
         {
-            var item = await _svc.GetAsync(id, ct);
-            if (item == null)
+            var dto = await _svc.GetAsync(id, ct);
+            if (dto == null)
                 return NotFound(new { message = "Script bulunamadı." });
 
-            return Ok(item);
+            return Ok(dto);
         }
 
         // ---------------- CREATE ----------------
+        /// <summary>
+        /// Yeni bir script oluşturur
+        /// </summary>
         [HttpPost]
-        public async Task<IActionResult> Create(
-            [FromBody] ScriptDetailsDto dto,
-            CancellationToken ct)
+        public async Task<IActionResult> Create([FromBody] ScriptDetailDto dto, CancellationToken ct)
         {
             var created = await _svc.CreateAsync(dto, ct);
             return Ok(created);
         }
 
         // ---------------- UPDATE ----------------
+        /// <summary>
+        /// Script günceller
+        /// </summary>
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(
-            int id,
-            [FromBody] ScriptDetailsDto dto,
-            CancellationToken ct)
+        public async Task<IActionResult> Update(int id, [FromBody] ScriptDetailDto dto, CancellationToken ct)
         {
             var updated = await _svc.UpdateAsync(id, dto, ct);
             return Ok(updated);
         }
 
         // ---------------- DELETE ----------------
+        /// <summary>
+        /// Script siler
+        /// </summary>
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
         {
             await _svc.DeleteAsync(id, ct);
-            return Ok(new { success = true });
+            return NoContent();
         }
     }
 }

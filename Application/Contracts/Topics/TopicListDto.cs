@@ -14,6 +14,8 @@
         public string? PremiseTr { get; set; }
 
         // --- Üretim Durumu ---
+
+        public bool AllowScriptGeneration { get; set; }
         public bool ScriptGenerated { get; set; }    // script üretimi tamam mı
         public bool IsActive { get; set; }           // topic üretime açık mı
         public bool CanGenerate => !ScriptGenerated && IsActive; // hesaplanabilir alan (UI için)

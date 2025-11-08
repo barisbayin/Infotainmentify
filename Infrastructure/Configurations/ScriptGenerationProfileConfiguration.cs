@@ -6,60 +6,61 @@ namespace Infrastructure.Configurations
 {
     public class ScriptGenerationProfileConfiguration : IEntityTypeConfiguration<ScriptGenerationProfile>
     {
-        public void Configure(EntityTypeBuilder<ScriptGenerationProfile> b)
+        public void Configure(EntityTypeBuilder<ScriptGenerationProfile> builder)
         {
-            b.ToTable("ScriptGenerationProfiles");
+            builder.ToTable("ScriptGenerationProfiles");
 
-            b.HasKey(x => x.Id);
+            builder.Property(e => e.ProfileName)
+                .IsRequired()
+                .HasMaxLength(100);
 
-            b.Property(x => x.ProfileName)
-                .HasMaxLength(100)
-                .IsRequired();
+            builder.Property(e => e.ModelName)
+                .IsRequired()
+                .HasMaxLength(100);
 
-            b.Property(x => x.ModelName)
-                .HasMaxLength(50)
-                .IsRequired();
-
-            b.Property(x => x.Temperature)
-                .HasColumnType("float")
-                .HasDefaultValue(0.8);
-
-            b.Property(x => x.Language)
+            builder.Property(e => e.Language)
                 .HasMaxLength(10)
                 .HasDefaultValue("en");
 
-            b.Property(x => x.Status)
+            builder.Property(e => e.OutputMode)
+                .HasMaxLength(20)
+                .HasDefaultValue("Script");
+
+            builder.Property(e => e.Status)
                 .HasMaxLength(50)
                 .HasDefaultValue("Pending");
 
-            b.Property(x => x.TopicIdsJson)
-                .HasColumnType("nvarchar(max)");
+            builder.Property(e => e.ProductionType)
+                .HasMaxLength(50);
 
-            b.Property(x => x.ConfigJson)
-                .HasColumnType("nvarchar(max)");
+            builder.Property(e => e.RenderStyle)
+                .HasMaxLength(50);
 
-            b.Property(x => x.RawResponseJson)
-                .HasColumnType("nvarchar(max)");
+            builder.Property(e => e.IsPublic)
+                .HasDefaultValue(false);
 
-            b.HasOne(x => x.Prompt)
+            builder.Property(e => e.AllowRetry)
+                .HasDefaultValue(true);
+
+            builder.HasOne(e => e.User)
                 .WithMany()
-                .HasForeignKey(x => x.PromptId)
+                .HasForeignKey(e => e.AppUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            b.HasOne(x => x.AiConnection)
+            builder.HasOne(e => e.AiConnection)
                 .WithMany()
-                .HasForeignKey(x => x.AiConnectionId)
+                .HasForeignKey(e => e.AiConnectionId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            b.HasOne(x => x.TopicGenerationProfile)
+            builder.HasOne(e => e.Prompt)
                 .WithMany()
-                .HasForeignKey(x => x.TopicGenerationProfileId)
+                .HasForeignKey(e => e.PromptId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(e => e.TopicGenerationProfile)
+                .WithMany()
+                .HasForeignKey(e => e.TopicGenerationProfileId)
                 .OnDelete(DeleteBehavior.SetNull);
-
-            b.HasOne(x => x.User)
-                .WithMany()
-                .HasForeignKey(x => x.AppUserId)
-                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

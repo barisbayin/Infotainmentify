@@ -39,34 +39,53 @@ namespace Application.Services
             if (topicId.HasValue)
                 predicate = x => x.UserId == _current.UserId && x.TopicId == topicId.Value;
 
-            var includes = new Expression<Func<Script, object>>[] { x => x.Topic };
+            var includes = new Expression<Func<Script, object>>[]
+            {
+                x => x.Topic,
+                x => x.Prompt,
+                x => x.AiConnection,
+                x => x.ScriptGenerationProfile
+            };
 
-            var list = await _repo.FindAsync(predicate, x => x.CreatedAt, desc: true, asNoTracking: true, ct, includes);
+            var list = await _repo.FindAsync(
+                predicate,
+                orderBy: x => x.CreatedAt,
+                desc: true,
+                asNoTracking: true,
+                ct,
+                includes);
 
             if (!string.IsNullOrWhiteSpace(q))
+            {
+                q = q.ToLowerInvariant();
                 list = list.Where(x =>
-                    x.Title.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                    (x.Summary != null && x.Summary.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
-                    x.Content.Contains(q, StringComparison.OrdinalIgnoreCase))
+                    (x.Title != null && x.Title.ToLower().Contains(q)) ||
+                    (x.Summary != null && x.Summary.ToLower().Contains(q)) ||
+                    (x.Topic?.Premise != null && x.Topic.Premise.ToLower().Contains(q)))
                     .ToList();
+            }
 
             return list.Select(x => x.ToListDto()).ToList();
         }
 
         // ---------------- GET ----------------
-        public async Task<ScriptDetailsDto?> GetAsync(int id, CancellationToken ct)
+        public async Task<ScriptDetailDto?> GetAsync(int id, CancellationToken ct)
         {
             var entity = await _repo.FirstOrDefaultAsync(
                 x => x.Id == id && x.UserId == _current.UserId,
-                include: q => q.Include(x => x.Topic),
+                include: q => q
+                    .Include(x => x.Topic)
+                    .Include(x => x.Prompt)
+                    .Include(x => x.AiConnection)
+                    .Include(x => x.ScriptGenerationProfile),
                 asNoTracking: true,
                 ct: ct);
 
-            return entity.ToDetailDto();
+            return entity?.ToDetailDto();
         }
 
         // ---------------- CREATE ----------------
-        public async Task<ScriptDetailsDto> CreateAsync(ScriptDetailsDto dto, CancellationToken ct)
+        public async Task<ScriptDetailDto> CreateAsync(ScriptDetailDto dto, CancellationToken ct)
         {
             var topicExists = await _topicRepo.AnyAsync(
                 x => x.Id == dto.TopicId && x.UserId == _current.UserId, ct);
@@ -82,7 +101,14 @@ namespace Application.Services
                 Content = dto.Content,
                 Summary = dto.Summary,
                 Language = dto.Language,
-                MetaJson = dto.MetaJson
+                RenderStyle = dto.RenderStyle,
+                ProductionType = dto.ProductionType,
+                MetaJson = dto.MetaJson,
+                ScriptJson = dto.ScriptJson,
+                ResponseTimeMs = dto.ResponseTimeMs,
+                PromptId = dto.PromptId,
+                AiConnectionId = dto.AiConnectionId,
+                ScriptGenerationProfileId = dto.ScriptGenerationProfileId
             };
 
             await _repo.AddAsync(entity, ct);
@@ -92,7 +118,7 @@ namespace Application.Services
         }
 
         // ---------------- UPDATE ----------------
-        public async Task<ScriptDetailsDto> UpdateAsync(int id, ScriptDetailsDto dto, CancellationToken ct)
+        public async Task<ScriptDetailDto> UpdateAsync(int id, ScriptDetailDto dto, CancellationToken ct)
         {
             var entity = await _repo.FirstOrDefaultAsync(
                 x => x.Id == id && x.UserId == _current.UserId,
@@ -106,7 +132,14 @@ namespace Application.Services
             entity.Content = dto.Content;
             entity.Summary = dto.Summary;
             entity.Language = dto.Language;
+            entity.RenderStyle = dto.RenderStyle;
+            entity.ProductionType = dto.ProductionType;
             entity.MetaJson = dto.MetaJson;
+            entity.ScriptJson = dto.ScriptJson;
+            entity.ResponseTimeMs = dto.ResponseTimeMs;
+            entity.PromptId = dto.PromptId;
+            entity.AiConnectionId = dto.AiConnectionId;
+            entity.ScriptGenerationProfileId = dto.ScriptGenerationProfileId;
 
             _repo.Update(entity);
             await _uow.SaveChangesAsync(ct);
@@ -128,5 +161,5 @@ namespace Application.Services
             _repo.Delete(entity);
             await _uow.SaveChangesAsync(ct);
         }
-    }
+    }   
 }

@@ -13,45 +13,79 @@ namespace WebAPI.Controllers
         private readonly ScriptGenerationService _svc;
         private readonly ICurrentUserService _current;
 
-        public ScriptGenerationController(ScriptGenerationService svc, ICurrentUserService current)
+        public ScriptGenerationController(
+            ScriptGenerationService svc,
+            ICurrentUserService current)
         {
             _svc = svc;
             _current = current;
         }
 
         /// <summary>
-        /// Belirtilen ScriptGenerationProfile üzerinden AI script üretimini başlatır.
+        /// Seçilen ScriptGenerationProfile’a göre uygun topic’ler için script üretimi başlatır.
         /// </summary>
         [HttpPost("generate")]
         public async Task<IActionResult> Generate([FromQuery] int profileId, CancellationToken ct)
         {
-            var result = await _svc.GenerateFromProfileAsync(profileId, ct);
-            return Ok(new { message = result });
+            try
+            {
+                var result = await _svc.GenerateFromProfileAsync(profileId, ct);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = $"{result.SuccessCount} script üretildi.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Script generation error: {ex.Message}");
+                return StatusCode(500, new { success = false, message = "Beklenmedik bir hata oluştu.", error = ex.Message });
+            }
         }
 
         /// <summary>
-        /// UI’dan doğrudan topic veya topicId listesi gönderilerek script üretimi yapılabilir.
+        /// Belirli topic ID’leri için seçilen profile göre script üretimi yapar.
         /// </summary>
         [HttpPost("generate-from-topics")]
-        public async Task<IActionResult> GenerateFromTopics(
-            [FromBody] GenerateFromTopicsRequest req,
-            CancellationToken ct)
+        public async Task<IActionResult> GenerateFromTopics([FromBody] GenerateFromTopicsRequest req, CancellationToken ct)
         {
-            // GenerateFromProfileAsync'e benzer ama profile olmadan direkt çalışır.
-            // Burada, UI'dan gönderilen topic listesi ve profileId alınır.
-            if (req.ProfileId <= 0)
-                return BadRequest(new { message = "Geçerli bir profileId gereklidir." });
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2)); // 💪 bağımsız token
 
-            // Parametreleri servis tarafında değerlendirmek istersen,
-            // GenerateFromProfileAsync overload olarak genişletilebilir.
-            var result = await _svc.GenerateFromProfileAsync(req.ProfileId, ct);
-            return Ok(new { message = result });
-        }
+            try
+            {
+                if (req.ProfileId <= 0)
+                    return BadRequest(new { success = false, message = "Geçersiz profil ID." });
 
-        public class GenerateFromTopicsRequest
-        {
-            public int ProfileId { get; set; }
-            public List<int>? TopicIds { get; set; }
+                var result = await _svc.GenerateForTopicsAsync(req.ProfileId, req.TopicIds ?? new List<int>(), cts.Token);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = $"{result.SuccessCount} script üretildi.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Script generation error: {ex.Message}");
+                return StatusCode(500, new { success = false, message = "Beklenmedik bir hata oluştu.", error = ex.Message });
+            }
         }
+    }
+
+    public class GenerateFromTopicsRequest
+    {
+        public int ProfileId { get; set; }
+        public List<int>? TopicIds { get; set; }
     }
 }

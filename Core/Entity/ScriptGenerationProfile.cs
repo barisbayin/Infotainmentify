@@ -5,6 +5,10 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
+    /// <summary>
+    /// ScriptGenerationProfile = AI destekli script (senaryo/metin) üretim profili.
+    /// Belirli topic veya topic setlerinden script oluşturmak için kullanılır.
+    /// </summary>
     public class ScriptGenerationProfile : BaseEntity, IJobProfile
     {
         [Required]
@@ -12,72 +16,60 @@ namespace Core.Entity
         [ForeignKey(nameof(AppUserId))]
         public AppUser User { get; set; } = null!;
 
-        // 🔗 Optional: Hangi Topic batch'inden script üretileceğini belirtir
         public int? TopicGenerationProfileId { get; set; }
         [ForeignKey(nameof(TopicGenerationProfileId))]
         public TopicGenerationProfile? TopicGenerationProfile { get; set; }
 
-        // 📜 Kullanılacak prompt (zorunlu)
         [Required]
         public int PromptId { get; set; }
         [ForeignKey(nameof(PromptId))]
         public Prompt Prompt { get; set; } = null!;
 
-        // 🤖 AI bağlantısı (zorunlu)
         [Required]
         public int AiConnectionId { get; set; }
         [ForeignKey(nameof(AiConnectionId))]
         public UserAiConnection AiConnection { get; set; } = null!;
 
-        // 💡 Profil bilgileri
         [Required, MaxLength(100)]
         public string ProfileName { get; set; } = null!;
-
-        [Required, MaxLength(50)]
+        [Required, MaxLength(100)]
         public string ModelName { get; set; } = null!;
 
-        public double Temperature { get; set; } = 0.8;
+        public float Temperature { get; set; } = 0.8f;
 
         [MaxLength(10)]
-        public string? Language { get; set; } = "en";
+        public string Language { get; set; } = "en";
 
-        // 🔄 Eğer belirli topic’ler seçildiyse burada saklanır (örn: [1,4,7])
-        [Column(TypeName = "nvarchar(max)")]
-        public string? TopicIdsJson { get; set; }
+        [MaxLength(20)]
+        public string OutputMode { get; set; } = "Script";
 
         [Column(TypeName = "nvarchar(max)")]
         public string? ConfigJson { get; set; }
 
-        [Column(TypeName = "nvarchar(max)")]
-        public string? RawResponseJson { get; set; }
-
         [MaxLength(50)]
         public string Status { get; set; } = "Pending";
 
-        [MaxLength(32)]
-        public string? ProductionType { get; set; } // "video" | "image" | "audio" | "mixed"
-        [MaxLength(64)]
-        public string? RenderStyle { get; set; }    // "cinematic_vertical" | "fastcut_info" | ...
+        [MaxLength(50)]
+        public string? ProductionType { get; set; }
 
-        public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.Now;
-        public DateTimeOffset? CompletedAt { get; set; }
+        [MaxLength(50)]
+        public string? RenderStyle { get; set; }
 
-        // 🧩 IJobProfile Implementation
+        public bool IsPublic { get; set; } = false;
+        public bool AllowRetry { get; set; } = true;
+
         public JobType JobType => JobType.ScriptGeneration;
 
-        public IDictionary<string, object> ToParameters()
-        {
-            return new Dictionary<string, object>
+        public IDictionary<string, object> ToParameters() =>
+            new Dictionary<string, object>
             {
-                { "PromptId", PromptId },
-                { "AiConnectionId", AiConnectionId },
-                { "ModelName", ModelName },
-                { "Temperature", Temperature },
-                { "Language", Language ?? "en" },
-                { "TopicGenerationProfileId", TopicGenerationProfileId ?? 0 },
-                { "TopicIdsJson", TopicIdsJson ?? "[]" }
+            { "PromptId", PromptId },
+            { "AiConnectionId", AiConnectionId },
+            { "ModelName", ModelName },
+            { "Temperature", Temperature },
+            { "Language", Language },
+            { "OutputMode", OutputMode }
             };
-        }
 
         public void Validate()
         {
@@ -87,4 +79,5 @@ namespace Core.Entity
                 throw new InvalidOperationException("AI bağlantısı zorunludur.");
         }
     }
+
 }

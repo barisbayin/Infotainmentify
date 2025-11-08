@@ -13,10 +13,13 @@ namespace Application.Mappers
                 ModelName = e.ModelName,
                 PromptName = e.Prompt?.Name,
                 AiProvider = e.AiConnection?.Name,
+                ProductionType = e.ProductionType,
+                RenderStyle = e.RenderStyle,
+                Language = e.Language,
                 RequestedCount = e.RequestedCount,
-                Status = e.Status,
-                StartedAt = e.StartedAt,
-                CompletedAt = e.CompletedAt
+                AutoGenerateScript = e.AutoGenerateScript,
+                IsPublic = e.IsPublic,
+                AllowRetry = e.AllowRetry
             };
 
         public static TopicGenerationProfileDetailDto ToDetailDto(this TopicGenerationProfile e)
@@ -27,11 +30,17 @@ namespace Application.Mappers
                 PromptId = e.PromptId,
                 AiConnectionId = e.AiConnectionId,
                 ModelName = e.ModelName,
+                ProductionType = e.ProductionType,
+                RenderStyle = e.RenderStyle,
+                Language = e.Language,
+                Temperature = e.Temperature,
                 RequestedCount = e.RequestedCount,
-                RawResponseJson = e.RawResponseJson,
-                StartedAt = e.StartedAt,
-                CompletedAt = e.CompletedAt,
-                Status = e.Status,
+                MaxTokens = e.MaxTokens,
+                TagsJson = e.TagsJson,
+                OutputMode = e.OutputMode,
+                AutoGenerateScript = e.AutoGenerateScript,
+                IsPublic = e.IsPublic,
+                AllowRetry = e.AllowRetry,
                 PromptName = e.Prompt?.Name,
                 AiProvider = e.AiConnection?.Name
             };

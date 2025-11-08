@@ -24,9 +24,7 @@ namespace WebAPI.Controllers
 
         // ---------------- LIST ----------------
         [HttpGet]
-        public async Task<IActionResult> List(
-            [FromQuery] string? status,
-            CancellationToken ct)
+        public async Task<IActionResult> List([FromQuery] string? status, CancellationToken ct)
         {
             var list = await _svc.ListAsync(_current.UserId, status, ct);
             return Ok(list);
@@ -44,13 +42,21 @@ namespace WebAPI.Controllers
         }
 
         // ---------------- UPSERT ----------------
-        [HttpPost]
-        public async Task<IActionResult> Upsert(
-            [FromBody] ScriptGenerationProfileDetailDto dto,
-            CancellationToken ct)
+        [HttpPost("save")]
+        public async Task<IActionResult> Upsert([FromBody] ScriptGenerationProfileDetailDto dto, CancellationToken ct)
         {
-            var id = await _svc.UpsertAsync(_current.UserId, dto, ct);
-            return Ok(new { id });
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var id = await _svc.UpsertAsync(_current.UserId, dto, ct);
+                return Ok(new { id });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         // ---------------- DELETE ----------------

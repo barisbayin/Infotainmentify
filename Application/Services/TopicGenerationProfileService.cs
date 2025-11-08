@@ -1,7 +1,7 @@
 ﻿using Application.Contracts.Topics;
+using Application.Mappers;
 using Core.Contracts;
 using Core.Entity;
-
 
 namespace Application.Services
 {
@@ -15,51 +15,60 @@ namespace Application.Services
             _repo = repo;
             _uow = uow;
         }
-        public Task<IReadOnlyList<TopicGenerationProfile>> ListAsync(
+
+        // -------------------- LIST --------------------
+        public async Task<IReadOnlyList<TopicGenerationProfileListDto>> ListAsync(
             int userId,
-            string? status,
+            string? q,
             CancellationToken ct)
-            => _repo.FindAsync(
+        {
+            var list = await _repo.FindAsync(
                 p => p.AppUserId == userId &&
-                     (string.IsNullOrWhiteSpace(status) || p.Status == status),
+                     (string.IsNullOrWhiteSpace(q) ||
+                      p.ProfileName.Contains(q) ||
+                      p.ModelName.Contains(q) ||
+                      (p.ProductionType ?? "").Contains(q) ||
+                      (p.RenderStyle ?? "").Contains(q)),
                 asNoTracking: true,
                 ct: ct,
                 x => x.Prompt,
                 x => x.AiConnection);
 
-        // -------------------- Tek kayıt --------------------
-        public async Task<TopicGenerationProfile?> GetAsync(
-           int userId, int id, CancellationToken ct, bool onlyActive = false)
-        {
-            var q = await _repo.FindAsync(
-                p => p.AppUserId == userId &&
-                     p.Id == id &&
-                     (!onlyActive || p.IsActive),
-                asNoTracking: true,
-                ct: ct,
-                x => x.Prompt, x => x.AiConnection);
-
-            return q.FirstOrDefault();
+            return list.Select(x => x.ToListDto()).ToList();
         }
 
+        // -------------------- GET SINGLE --------------------
+        public async Task<TopicGenerationProfileDetailDto?> GetAsync(
+            int userId, int id, CancellationToken ct)
+        {
+            var e = await _repo.FirstOrDefaultAsync(
+                p => p.AppUserId == userId && p.Id == id,
+                asNoTracking: true,
+                ct: ct,
+                x => x.Prompt,
+                x => x.AiConnection);
 
+            return e?.ToDetailDto();
+        }
 
+        // -------------------- CREATE / UPDATE --------------------
         /// <summary>
         /// Id == 0 → Create, Id > 0 → Update.
-        /// (UserId, PromptId, AiConnectionId, ModelName) benzersiz kontrolü içerir.
+        /// UNIQUE: (AppUserId, PromptId, AiConnectionId, ProfileName, ModelName)
         /// </summary>
         public async Task<int> UpsertAsync(int userId, TopicGenerationProfileDetailDto dto, CancellationToken ct)
         {
             var modelName = dto.ModelName.Trim();
+            var profileName = dto.ProfileName.Trim();
 
             if (dto.Id == 0)
             {
-                // UNIQUE: (UserId, PromptId, AiConnectionId, ModelName)
+                // Benzersizlik kontrolü
                 var exists = await _repo.AnyAsync(p =>
                     p.AppUserId == userId &&
                     p.PromptId == dto.PromptId &&
                     p.AiConnectionId == dto.AiConnectionId &&
-                    p.ProfileName == dto.ProfileName &&
+                    p.ProfileName == profileName &&
                     p.ModelName == modelName, ct);
 
                 if (exists)
@@ -67,16 +76,22 @@ namespace Application.Services
 
                 var e = new TopicGenerationProfile
                 {
-                    ProfileName = dto.ProfileName,
                     AppUserId = userId,
                     PromptId = dto.PromptId,
                     AiConnectionId = dto.AiConnectionId,
+                    ProfileName = profileName,
                     ModelName = modelName,
                     RequestedCount = dto.RequestedCount,
-                    RawResponseJson = dto.RawResponseJson ?? "{}",
-                    StartedAt = dto.StartedAt ?? DateTimeOffset.Now,
-                    CompletedAt = dto.CompletedAt,
-                    Status = dto.Status ?? "Pending"
+                    Temperature = dto.Temperature,
+                    Language = dto.Language,
+                    MaxTokens = dto.MaxTokens,
+                    ProductionType = dto.ProductionType,
+                    RenderStyle = dto.RenderStyle,
+                    TagsJson = dto.TagsJson,
+                    OutputMode = dto.OutputMode,
+                    AutoGenerateScript = dto.AutoGenerateScript,
+                    IsPublic = dto.IsPublic,
+                    AllowRetry = dto.AllowRetry
                 };
 
                 await _repo.AddAsync(e, ct);
@@ -92,32 +107,40 @@ namespace Application.Services
                 if (e is null)
                     throw new KeyNotFoundException("TopicGenerationProfile bulunamadı.");
 
-                // uniqueness check if AiConnection/Prompt/ModelName changed
+                // Eğer benzersizlik alanları değiştiyse tekrar kontrol et
                 if (e.PromptId != dto.PromptId ||
                     e.AiConnectionId != dto.AiConnectionId ||
-                    !string.Equals(e.ModelName, modelName, StringComparison.Ordinal))
+                    !string.Equals(e.ModelName, modelName, StringComparison.Ordinal) ||
+                    !string.Equals(e.ProfileName, profileName, StringComparison.Ordinal))
                 {
                     var clash = await _repo.AnyAsync(p =>
                         p.AppUserId == userId &&
                         p.PromptId == dto.PromptId &&
                         p.AiConnectionId == dto.AiConnectionId &&
+                        p.ProfileName == profileName &&
                         p.ModelName == modelName &&
-                        p.ProfileName == dto.ProfileName &&
                         p.Id != dto.Id, ct);
 
                     if (clash)
                         throw new InvalidOperationException("Bu kombinasyonda başka bir profil zaten mevcut.");
                 }
 
-                e.ProfileName = dto.ProfileName;
+                // Güncelle
+                e.ProfileName = profileName;
                 e.PromptId = dto.PromptId;
                 e.AiConnectionId = dto.AiConnectionId;
                 e.ModelName = modelName;
                 e.RequestedCount = dto.RequestedCount;
-                e.RawResponseJson = dto.RawResponseJson ?? "{}";
-                e.StartedAt = dto.StartedAt ?? e.StartedAt;
-                e.CompletedAt = dto.CompletedAt;
-                e.Status = dto.Status ?? e.Status;
+                e.Temperature = dto.Temperature;
+                e.Language = dto.Language;
+                e.MaxTokens = dto.MaxTokens;
+                e.ProductionType = dto.ProductionType;
+                e.RenderStyle = dto.RenderStyle;
+                e.TagsJson = dto.TagsJson;
+                e.OutputMode = dto.OutputMode;
+                e.AutoGenerateScript = dto.AutoGenerateScript;
+                e.IsPublic = dto.IsPublic;
+                e.AllowRetry = dto.AllowRetry;
 
                 _repo.Update(e);
                 await _uow.SaveChangesAsync(ct);
@@ -125,10 +148,15 @@ namespace Application.Services
             }
         }
 
+        // -------------------- DELETE --------------------
         public async Task<bool> DeleteAsync(int userId, int id, CancellationToken ct)
         {
-            var e = await _repo.FirstOrDefaultAsync(p => p.AppUserId == userId && p.Id == id, asNoTracking: false, ct: ct);
-            if (e is null) return false;
+            var e = await _repo.FirstOrDefaultAsync(
+                p => p.AppUserId == userId && p.Id == id,
+                asNoTracking: false, ct: ct);
+
+            if (e is null)
+                return false;
 
             _repo.Delete(e);
             await _uow.SaveChangesAsync(ct);

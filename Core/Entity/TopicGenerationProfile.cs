@@ -5,6 +5,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
+    /// <summary>
+    /// TopicGenerationProfile = AI tabanlı topic üretiminin tarif (şablon) profilidir.
+    /// Hangi model, prompt, bağlantı ve parametrelerle üretim yapılacağını tanımlar.
+    /// Gerçek üretim, TopicGenerationService tarafından yapılır.
+    /// </summary>
     public class TopicGenerationProfile : BaseEntity, IJobProfile
     {
         [Required]
@@ -25,31 +30,40 @@ namespace Core.Entity
         [ForeignKey(nameof(AiConnectionId))]
         public UserAiConnection AiConnection { get; set; } = null!;
 
-        [Required]
-        [MaxLength(50)]
-        public string ProfileName { get; set; } = null!; // örn: gpt-4-turbo, gemini-1.5-pro
+        [Required, MaxLength(100)]
+        public string ProfileName { get; set; } = null!; // Kullanıcıya özel ad (örn: “Science Shorts 30’luk Set”)
 
-        [Required]
-        [MaxLength(50)]
-        public string ModelName { get; set; } = null!; // örn: gpt-4-turbo, gemini-1.5-pro
+        [Required, MaxLength(100)]
+        public string ModelName { get; set; } = null!; // Örn: gpt-4-turbo, gemini-1.5-pro
 
-        public int RequestedCount { get; set; } // kaç topic istenmişti (örn: 30)
+        public int RequestedCount { get; set; } = 30; // Kaç topic üretilecek
+
+        [MaxLength(50)]
+        public string? ProductionType { get; set; }   // Örn: "infotainment", "horror", "science"
+
+        [MaxLength(50)]
+        public string? RenderStyle { get; set; }      // Örn: "cinematic", "handdrawn", "cartoon"
+
+        [MaxLength(10)]
+        public string Language { get; set; } = "en";  // "en", "tr", "es" gibi
+
+        public float Temperature { get; set; } = 0.7f;
+
+        public int? MaxTokens { get; set; }
 
         [Column(TypeName = "nvarchar(max)")]
-        public string RawResponseJson { get; set; } = null!; // AI'dan gelen orijinal JSON
+        public string? TagsJson { get; set; } // JSON array: ["psychology","funny","viral"]
 
-        [MaxLength(50)]
-        public string? ProductionType { get; set; }   // örn: "shorts", "infotainment", "horror"
-        [MaxLength(50)]
-        public string? RenderStyle { get; set; }      // örn: "cinematic", "handdrawn"
+        [MaxLength(20)]
+        public string OutputMode { get; set; } = "Topic"; // Topic | Script | Image | Mixed
 
-        public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.Now;
-        public DateTimeOffset? CompletedAt { get; set; }
+        public bool AutoGenerateScript { get; set; } = false; // Topic sonrası otomatik script üretimi
 
-        [MaxLength(50)]
-        public string Status { get; set; } = "Pending"; // Pending | Success | Failed
+        // --- Flags ---
+        public bool IsPublic { get; set; } = false; // Başkaları da kullanabilsin mi?
+        public bool AllowRetry { get; set; } = true; // Başarısız olursa tekrar dene
 
-        public JobType JobType => throw new NotImplementedException();
+        public JobType JobType => JobType.TopicGeneration;
 
         public IDictionary<string, object> ToParameters()
         {

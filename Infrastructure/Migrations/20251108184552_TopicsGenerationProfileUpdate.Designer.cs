@@ -4,6 +4,7 @@ using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251108184552_TopicsGenerationProfileUpdate")]
+    partial class TopicsGenerationProfileUpdate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -308,22 +311,15 @@ namespace Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("AiConnectionId")
-                        .HasColumnType("int");
-
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2(0)")
-                        .HasDefaultValueSql("GETDATE()");
+                        .HasColumnType("datetime2");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
+                        .HasColumnType("bit");
 
                     b.Property<string>("Language")
                         .HasMaxLength(50)
@@ -332,30 +328,11 @@ namespace Infrastructure.Migrations
                     b.Property<string>("MetaJson")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("ProductionType")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("PromptId")
-                        .HasColumnType("int");
-
                     b.Property<bool>("Removed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
+                        .HasColumnType("bit");
 
                     b.Property<DateTime?>("RemovedAt")
-                        .HasColumnType("datetime2(0)");
-
-                    b.Property<string>("RenderStyle")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("ResponseTimeMs")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("ScriptGenerationProfileId")
-                        .HasColumnType("int");
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("ScriptJson")
                         .HasColumnType("nvarchar(max)");
@@ -373,22 +350,12 @@ namespace Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2(0)");
+                        .HasColumnType("datetime2");
 
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AiConnectionId");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("PromptId");
-
-                    b.HasIndex("Removed");
-
-                    b.HasIndex("ScriptGenerationProfileId");
 
                     b.HasIndex("TopicId");
 
@@ -408,13 +375,11 @@ namespace Infrastructure.Migrations
                     b.Property<int>("AiConnectionId")
                         .HasColumnType("int");
 
-                    b.Property<bool>("AllowRetry")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
                     b.Property<int>("AppUserId")
                         .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("ConfigJson")
                         .HasColumnType("nvarchar(max)");
@@ -425,13 +390,7 @@ namespace Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("IsPublic")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
                     b.Property<string>("Language")
-                        .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)")
@@ -439,19 +398,12 @@ namespace Infrastructure.Migrations
 
                     b.Property<string>("ModelName")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("OutputMode")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("Script");
-
-                    b.Property<string>("ProductionType")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ProductionType")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
 
                     b.Property<string>("ProfileName")
                         .IsRequired()
@@ -461,6 +413,9 @@ namespace Infrastructure.Migrations
                     b.Property<int>("PromptId")
                         .HasColumnType("int");
 
+                    b.Property<string>("RawResponseJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("Removed")
                         .HasColumnType("bit");
 
@@ -468,8 +423,11 @@ namespace Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("RenderStyle")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -478,11 +436,16 @@ namespace Infrastructure.Migrations
                         .HasColumnType("nvarchar(50)")
                         .HasDefaultValue("Pending");
 
-                    b.Property<float>("Temperature")
-                        .HasColumnType("real");
+                    b.Property<double>("Temperature")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("float")
+                        .HasDefaultValue(0.80000000000000004);
 
                     b.Property<int?>("TopicGenerationProfileId")
                         .HasColumnType("int");
+
+                    b.Property<string>("TopicIdsJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -507,11 +470,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("AllowScriptGeneration")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
 
                     b.Property<string>("Category")
                         .HasMaxLength(64)
@@ -892,21 +850,6 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Core.Entity.Script", b =>
                 {
-                    b.HasOne("Core.Entity.UserAiConnection", "AiConnection")
-                        .WithMany()
-                        .HasForeignKey("AiConnectionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Core.Entity.Prompt", "Prompt")
-                        .WithMany()
-                        .HasForeignKey("PromptId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Core.Entity.ScriptGenerationProfile", "ScriptGenerationProfile")
-                        .WithMany()
-                        .HasForeignKey("ScriptGenerationProfileId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Core.Entity.Topic", "Topic")
                         .WithMany()
                         .HasForeignKey("TopicId")
@@ -916,14 +859,8 @@ namespace Infrastructure.Migrations
                     b.HasOne("Core.Entity.AppUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.NoAction)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("AiConnection");
-
-                    b.Navigation("Prompt");
-
-                    b.Navigation("ScriptGenerationProfile");
 
                     b.Navigation("Topic");
 

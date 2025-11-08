@@ -91,8 +91,19 @@ namespace WebAPI
             //builder.Services.AddScoped<IJobExecutor, StoryGenerationJobExecutor>();
 
             builder.Services.AddScoped<IAiGeneratorFactory, AiGeneratorFactory>();
-            builder.Services.AddScoped<GeminiAiClient>();
-            builder.Services.AddScoped<OpenAiClient>();
+            //builder.Services.AddScoped<GeminiAiClient>();
+            //builder.Services.AddScoped<OpenAiClient>();
+
+            builder.Services.AddHttpClient<GeminiAiClient>(client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(2); // güvenli timeout
+            });
+
+            builder.Services.AddHttpClient<OpenAiClient>(client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(2);
+            });
+
 
 
 

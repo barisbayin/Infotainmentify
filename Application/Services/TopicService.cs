@@ -176,5 +176,22 @@ namespace Application.Services
             e.UpdatedAt = DateTime.Now;
             await _uow.SaveChangesAsync(ct);
         }
+
+        public async Task ToggleAllowScriptGenerationAsync(int userId, int topicId, bool allow, CancellationToken ct)
+        {
+            var topic = await _repo.FirstOrDefaultAsync(
+                x => x.UserId == userId && x.Id == topicId,
+                asNoTracking: false, ct: ct);
+
+            if (topic is null)
+                throw new KeyNotFoundException("Topic bulunamadı.");
+
+            topic.AllowScriptGeneration = allow;
+            topic.UpdatedAt = DateTime.Now;
+
+            _repo.Update(topic);
+            await _uow.SaveChangesAsync(ct);
+        }
+
     }
 }

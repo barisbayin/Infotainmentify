@@ -2,6 +2,7 @@
 using Application.Mappers;
 using Core.Contracts;
 using Core.Entity;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services
 {
@@ -17,7 +18,10 @@ namespace Application.Services
         }
 
         // ---------------- LIST ----------------
-        public async Task<IReadOnlyList<ScriptGenerationProfileListDto>> ListAsync(int userId, string? status, CancellationToken ct)
+        public async Task<IReadOnlyList<ScriptGenerationProfileListDto>> ListAsync(
+            int userId,
+            string? status,
+            CancellationToken ct)
         {
             var list = await _repo.FindAsync(
                 p => p.AppUserId == userId &&
@@ -32,25 +36,33 @@ namespace Application.Services
         }
 
         // ---------------- GET ----------------
-        public async Task<ScriptGenerationProfileDetailDto?> GetAsync(int userId, int id, CancellationToken ct)
+        public async Task<ScriptGenerationProfileDetailDto?> GetAsync(
+            int userId,
+            int id,
+            CancellationToken ct)
         {
-            var q = await _repo.FindAsync(
+            var entity = await _repo.FirstOrDefaultAsync(
                 p => p.AppUserId == userId && p.Id == id,
+                include: q => q
+                    .Include(x => x.Prompt)
+                    .Include(x => x.AiConnection)
+                    .Include(x => x.TopicGenerationProfile),
                 asNoTracking: true,
-                ct: ct,
-                x => x.Prompt,
-                x => x.AiConnection,
-                x => x.TopicGenerationProfile);
+                ct: ct);
 
-            return q.FirstOrDefault()?.ToDetailsDto();
+            return entity?.ToDetailDto();
         }
 
         // ---------------- UPSERT ----------------
-        public async Task<int> UpsertAsync(int userId, ScriptGenerationProfileDetailDto dto, CancellationToken ct)
+        public async Task<int> UpsertAsync(
+            int userId,
+            ScriptGenerationProfileDetailDto dto,
+            CancellationToken ct)
         {
-            var modelName = dto.ModelName.Trim();
             var profileName = dto.ProfileName.Trim();
+            var modelName = dto.ModelName.Trim();
 
+            // --- CREATE ---
             if (dto.Id == 0)
             {
                 var exists = await _repo.AnyAsync(p =>
@@ -61,7 +73,7 @@ namespace Application.Services
                     p.ModelName == modelName, ct);
 
                 if (exists)
-                    throw new InvalidOperationException("Bu kombinasyonda bir ScriptGenerationProfile zaten mevcut.");
+                    throw new InvalidOperationException("Bu kombinasyonda bir profil zaten mevcut.");
 
                 var e = new ScriptGenerationProfile
                 {
@@ -73,53 +85,57 @@ namespace Application.Services
                     ModelName = modelName,
                     Temperature = dto.Temperature,
                     Language = dto.Language,
-                    TopicIdsJson = dto.TopicIdsJson ?? "[]",
+                    OutputMode = dto.OutputMode ?? "Script",
                     ConfigJson = dto.ConfigJson ?? "{}",
-                    RawResponseJson = dto.RawResponseJson ?? "{}",
-                    StartedAt = dto.StartedAt ?? DateTimeOffset.Now,
-                    CompletedAt = dto.CompletedAt,
                     Status = dto.Status ?? "Pending",
-                    IsActive = dto.IsActive
+                    ProductionType = dto.ProductionType,
+                    RenderStyle = dto.RenderStyle,
+                    IsPublic = dto.IsPublic,
+                    AllowRetry = dto.AllowRetry
                 };
 
                 await _repo.AddAsync(e, ct);
                 await _uow.SaveChangesAsync(ct);
                 return e.Id;
             }
-            else
-            {
-                var e = await _repo.FirstOrDefaultAsync(
-                    p => p.AppUserId == userId && p.Id == dto.Id,
-                    asNoTracking: false, ct: ct);
 
-                if (e == null)
-                    throw new KeyNotFoundException("ScriptGenerationProfile bulunamadı.");
+            // --- UPDATE ---
+            var entity = await _repo.FirstOrDefaultAsync(
+                p => p.AppUserId == userId && p.Id == dto.Id,
+                asNoTracking: false,
+                ct: ct);
 
-                e.PromptId = dto.PromptId;
-                e.AiConnectionId = dto.AiConnectionId;
-                e.TopicGenerationProfileId = dto.TopicGenerationProfileId;
-                e.ProfileName = profileName;
-                e.ModelName = modelName;
-                e.Temperature = dto.Temperature;
-                e.Language = dto.Language;
-                e.TopicIdsJson = dto.TopicIdsJson ?? "[]";
-                e.ConfigJson = dto.ConfigJson ?? "{}";
-                e.RawResponseJson = dto.RawResponseJson ?? "{}";
-                e.StartedAt = dto.StartedAt ?? e.StartedAt;
-                e.CompletedAt = dto.CompletedAt;
-                e.Status = dto.Status ?? e.Status;
-                e.IsActive = dto.IsActive;
+            if (entity == null)
+                throw new KeyNotFoundException("ScriptGenerationProfile bulunamadı.");
 
-                _repo.Update(e);
-                await _uow.SaveChangesAsync(ct);
-                return e.Id;
-            }
+            entity.PromptId = dto.PromptId;
+            entity.AiConnectionId = dto.AiConnectionId;
+            entity.TopicGenerationProfileId = dto.TopicGenerationProfileId;
+            entity.ProfileName = profileName;
+            entity.ModelName = modelName;
+            entity.Temperature = dto.Temperature;
+            entity.Language = dto.Language;
+            entity.OutputMode = dto.OutputMode ?? "Script";
+            entity.ConfigJson = dto.ConfigJson ?? "{}";
+            entity.Status = dto.Status ?? entity.Status;
+            entity.ProductionType = dto.ProductionType;
+            entity.RenderStyle = dto.RenderStyle;
+            entity.IsPublic = dto.IsPublic;
+            entity.AllowRetry = dto.AllowRetry;
+
+            _repo.Update(entity);
+            await _uow.SaveChangesAsync(ct);
+            return entity.Id;
         }
 
         // ---------------- DELETE ----------------
         public async Task<bool> DeleteAsync(int userId, int id, CancellationToken ct)
         {
-            var e = await _repo.FirstOrDefaultAsync(p => p.AppUserId == userId && p.Id == id, asNoTracking: false, ct: ct);
+            var e = await _repo.FirstOrDefaultAsync(
+                p => p.AppUserId == userId && p.Id == id,
+                asNoTracking: false,
+                ct: ct);
+
             if (e is null)
                 return false;
 

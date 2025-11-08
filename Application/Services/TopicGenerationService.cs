@@ -8,6 +8,12 @@ using System.Text.Json;
 
 namespace Application.Services
 {
+    /// <summary>
+    /// TopicGenerationProfile kayıtlarını kullanarak AI tabanlı topic üretimi yapan servis.
+    /// </summary>
+    /// <summary>
+    /// TopicGenerationProfile kayıtlarını kullanarak AI tabanlı topic üretimi yapan servis.
+    /// </summary>
     public class TopicGenerationService
     {
         private readonly IAiGeneratorFactory _factory;
@@ -49,9 +55,6 @@ namespace Application.Services
             var profile = await _profileRepo.GetByIdAsync(profileId, true, ct)
                 ?? throw new InvalidOperationException("Topic generation profili bulunamadı.");
 
-            if (!profile.IsActive)
-                throw new InvalidOperationException("Bu profil pasif durumda, topic üretimi yapılamaz.");
-
             var aiConn = await _aiRepo.GetByIdAsync(profile.AiConnectionId, true, ct)
                 ?? throw new InvalidOperationException("AI bağlantısı bulunamadı.");
 
@@ -64,36 +67,59 @@ namespace Application.Services
             if (!prompt.IsActive)
                 throw new InvalidOperationException("Prompt pasif durumda, topic üretimi yapılamaz.");
 
-            // User fallback
+            // 🔹 Kullanıcı fallback
             if (userId <= 0)
                 userId = profile.AppUserId;
 
-            // --- Credential çöz ---
+            // 🔹 Credential çöz
             var credsJson = _secret.Unprotect(aiConn.EncryptedCredentialJson);
             var creds = JsonSerializer.Deserialize<Dictionary<string, string>>(credsJson)
                 ?? throw new InvalidOperationException("Geçersiz credential formatı.");
 
             var generator = _factory.Resolve(aiConn.Provider, creds);
 
+            var systemPrompt = (prompt.SystemPrompt ?? string.Empty)
+                .Replace("{{COUNT}}", profile.RequestedCount.ToString())
+                .Replace("{{LANGUAGE}}", profile.Language ?? "en-US")
+                .Replace("{{COUNT * 2}}", (profile.RequestedCount * 2).ToString());
+
+            var userPrompt = (prompt.Body ?? string.Empty)
+                .Replace("{{COUNT}}", profile.RequestedCount.ToString())
+                .Replace("{{LANGUAGE}}", profile.Language ?? "en-US")
+                .Replace("{{COUNT * 2}}", (profile.RequestedCount * 2).ToString());
+
+            // 🔹 Topic üretim isteği hazırla
             var request = new TopicGenerationRequest
             {
-                SystemPrompt = prompt.SystemPrompt ?? string.Empty,
-                UserPrompt = prompt.Body,
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
                 Count = profile.RequestedCount,
-                Model = creds.GetValueOrDefault("model", aiConn.TextModel),
-                Temperature = (double)(aiConn.Temperature ?? 0.8M),
-                ProfileId = profile.Id,
-                UserId = userId,
+                Model = profile.ModelName ?? creds.GetValueOrDefault("model", aiConn.TextModel),
+                Temperature = profile.Temperature,
+                Language = profile.Language ?? "en",
+                MaxTokens = profile.MaxTokens,
+                OutputMode = profile.OutputMode ?? "Topic",
                 ProductionType = profile.ProductionType ?? "shorts",
                 RenderStyle = profile.RenderStyle ?? "default",
+                TagsJson = profile.TagsJson,
+                ProfileId = profile.Id,
+                UserId = userId,
                 ExtraParameters = creds
             };
 
+            // 🔹 AI'dan konu üret
             var topics = await generator.GenerateTopicsAsync(request, ct);
+
+            // 🔹 Retry özelliği
+            if (topics.Count == 0 && profile.AllowRetry)
+                topics = await generator.GenerateTopicsAsync(request, ct);
+
             if (topics.Count == 0)
                 return "Hiç konu üretilmedi.";
 
             var now = DateTime.Now;
+
+            // 🔹 Üretilen topic'leri veritabanına dönüştür
             var entities = topics.Select((t, i) => new Topic
             {
                 UserId = userId,
@@ -107,7 +133,7 @@ namespace Application.Services
                 PremiseTr = t.PremiseTr,
                 Tone = t.Tone,
                 PotentialVisual = t.PotentialVisual,
-                RenderStyle = t.RenderStyle ?? "default",
+                RenderStyle = t.RenderStyle ?? profile.RenderStyle,
                 VoiceHint = t.VoiceHint,
                 ScriptHint = t.ScriptHint,
                 FactCheck = t.FactCheck,
@@ -115,7 +141,6 @@ namespace Application.Services
                 Priority = t.Priority,
 
                 TopicJson = JsonSerializer.Serialize(t),
-
                 ScriptGenerated = false,
                 ScriptGeneratedAt = null,
                 IsActive = true,
@@ -123,8 +148,16 @@ namespace Application.Services
                 UpdatedAt = now
             }).ToList();
 
+            // 🔹 Kayıtları ekle
             await _topicRepo.AddRangeAsync(entities, ct);
             await _uow.SaveChangesAsync(ct);
+
+            // 🔹 Opsiyonel script üretimi
+            if (profile.AutoGenerateScript)
+            {
+                // TODO: ScriptGenerationService entegrasyonu
+                // await _scriptService.GenerateForTopicsAsync(entities.Select(x => x.Id), ct);
+            }
 
             return $"{entities.Count} adet konu başarıyla üretildi.";
         }

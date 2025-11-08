@@ -17,6 +17,7 @@ namespace Application.AiLayer
         public GeminiAiClient(HttpClient http)
         {
             _http = http;
+            _http.Timeout = TimeSpan.FromMinutes(2);
         }
 
         // 🔹 Credential bilgilerini runtime’da set ediyoruz
@@ -51,6 +52,10 @@ namespace Application.AiLayer
             };
 
             var url = $"https://generativelanguage.googleapis.com/v1beta/models/{(model ?? _model)}:generateContent?key={_apiKey}";
+
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            linkedCts.CancelAfter(TimeSpan.FromMinutes(2)); // ✅ güvenli timeout
+
             var res = await _http.PostAsJsonAsync(url, payload, ct);
             var json = await res.Content.ReadAsStringAsync(ct);
 
@@ -118,6 +123,52 @@ namespace Application.AiLayer
             catch (Exception ex)
             {
                 throw new InvalidOperationException($"Gemini Topic JSON parse failed: {ex.Message}\n\nRaw:\n{result}");
+            }
+        }
+
+        // ------------------------------------------
+        // 🧩 Script Generation (Structured JSON)
+        // ------------------------------------------
+        public async Task<IReadOnlyList<ScriptResult>> GenerateScriptsAsync(
+            ScriptGenerationRequest request,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(_apiKey))
+                throw new InvalidOperationException("Gemini client not initialized — missing API key.");
+
+            var fullPrompt = $"{request.SystemPrompt}\n\n{request.UserPrompt}".Trim();
+
+            // 🧩 Topic bazlı bilgileri bağla
+            if (!string.IsNullOrWhiteSpace(request.Premise))
+                fullPrompt += $"\nPremise: {request.Premise}";
+            if (!string.IsNullOrWhiteSpace(request.Category))
+                fullPrompt += $"\nCategory: {request.Category}";
+            if (!string.IsNullOrWhiteSpace(request.Tone))
+                fullPrompt += $"\nTone: {request.Tone}";
+            if (!string.IsNullOrWhiteSpace(request.PotentialVisual))
+                fullPrompt += $"\nVisual Hint: {request.PotentialVisual}";
+
+            // Ek metadata
+            if (!string.IsNullOrWhiteSpace(request.ProductionType))
+                fullPrompt += $"\n[ProductionType: {request.ProductionType}]";
+            if (!string.IsNullOrWhiteSpace(request.RenderStyle))
+                fullPrompt += $"\n[RenderStyle: {request.RenderStyle}]";
+
+            var result = await GenerateTextAsync(fullPrompt, request.Temperature, request.Model ?? _model, ct);
+
+            try
+            {
+                var scripts = JsonSerializer.Deserialize<List<ScriptResult>>(result,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (scripts == null || scripts.Count == 0)
+                    throw new InvalidOperationException("Gemini boş veya geçersiz ScriptResult JSON döndürdü.");
+
+                return scripts;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Gemini Script JSON parse failed: {ex.Message}\n\nRaw:\n{result}");
             }
         }
 

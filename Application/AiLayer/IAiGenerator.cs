@@ -34,6 +34,14 @@ namespace Application.AiLayer
             TopicGenerationRequest request,
             CancellationToken ct = default);
 
+
+        /// <summary>
+        /// Yapılandırılmış script üretimi (structured JSON output).
+        /// </summary>
+        Task<IReadOnlyList<ScriptResult>> GenerateScriptsAsync(
+            ScriptGenerationRequest request,
+            CancellationToken ct = default);
+
         // -------------------------------
         // 🎨 Görsel Üretimi
         // -------------------------------

@@ -1,9 +1,8 @@
-﻿using Application.Services;
+﻿using Application.Contracts.Topics;
+using Application.Services;
 using Core.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Application.Mappers;
-using Application.Contracts.Topics;
 
 namespace WebAPI.Controllers
 {
@@ -15,17 +14,19 @@ namespace WebAPI.Controllers
         private readonly TopicGenerationProfileService _svc;
         private readonly ICurrentUserService _current;
 
-        public TopicGenerationProfilesController(TopicGenerationProfileService svc, ICurrentUserService current)
+        public TopicGenerationProfilesController(
+            TopicGenerationProfileService svc,
+            ICurrentUserService current)
         {
             _svc = svc;
             _current = current;
         }
 
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] string? status, CancellationToken ct)
+        public async Task<IActionResult> List([FromQuery] string? q, CancellationToken ct)
         {
-            var list = await _svc.ListAsync(_current.UserId, status, ct);
-            return Ok(list.Select(x => x.ToListDto()));
+            var list = await _svc.ListAsync(_current.UserId, q, ct);
+            return Ok(list);
         }
 
         [HttpGet("{id:int}")]
@@ -33,7 +34,7 @@ namespace WebAPI.Controllers
         {
             var e = await _svc.GetAsync(_current.UserId, id, ct);
             if (e is null) return NotFound();
-            return Ok(e.ToDetailDto());
+            return Ok(e);
         }
 
         [HttpPost]
