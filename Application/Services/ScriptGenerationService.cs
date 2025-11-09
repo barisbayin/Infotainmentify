@@ -10,6 +10,7 @@ namespace Application.Services
 {
     /// <summary>
     /// Seçilen ScriptGenerationProfile’a göre ilgili Topic(ler) için script üretimi yapar.
+    /// Gerçek zamanlı ilerleme ve tamamlanma bilgilerini INotifierService üzerinden SignalR’a gönderir.
     /// </summary>
     public class ScriptGenerationService
     {
@@ -22,6 +23,7 @@ namespace Application.Services
         private readonly ISecretStore _secret;
         private readonly IUnitOfWork _uow;
         private readonly ICurrentUserService _current;
+        private readonly INotifierService _notifier;
 
         public ScriptGenerationService(
             IAiGeneratorFactory factory,
@@ -32,7 +34,8 @@ namespace Application.Services
             IRepository<Topic> topicRepo,
             ISecretStore secret,
             IUnitOfWork uow,
-            ICurrentUserService current)
+            ICurrentUserService current,
+            INotifierService notifier) // 🔹 yeni eklendi
         {
             _factory = factory;
             _aiRepo = aiRepo;
@@ -43,6 +46,7 @@ namespace Application.Services
             _secret = secret;
             _uow = uow;
             _current = current;
+            _notifier = notifier;
         }
 
         /// <summary>
@@ -51,6 +55,7 @@ namespace Application.Services
         public async Task<ScriptGenerationResult> GenerateFromProfileAsync(int profileId, CancellationToken ct)
         {
             var userId = _current.UserId;
+            var jobId = profileId; // job id olarak profile id kullanılabilir
 
             // 🔹 Profile, Prompt, Connection doğrulama
             var profile = await _profileRepo.GetByIdAsync(profileId, true, ct)
@@ -88,7 +93,6 @@ namespace Application.Services
             if (topics.Count == 0)
                 throw new InvalidOperationException("Script üretilecek uygun topic bulunamadı.");
 
-            // 🔹 Ortak parametreler
             var temperature = profile.Temperature > 0 ? profile.Temperature : 0.8;
             var model = profile.ModelName ?? creds.GetValueOrDefault("model", aiConn.TextModel);
             var language = profile.Language ?? "en";
@@ -98,7 +102,6 @@ namespace Application.Services
             var generatedIds = new List<int>();
             var failedIds = new List<int>();
 
-            // 🔹 Prompt’ları hazırla
             var systemPrompt = (prompt.SystemPrompt ?? string.Empty)
                 .Replace("{{LANGUAGE}}", language)
                 .Replace("{{PRODUCTION_TYPE}}", productionType)
@@ -109,9 +112,14 @@ namespace Application.Services
                 .Replace("{{PRODUCTION_TYPE}}", productionType)
                 .Replace("{{RENDER_STYLE}}", renderStyle);
 
-            // 🔹 Her topic için üretim
+            int processed = 0;
             foreach (var topic in topics)
             {
+                processed++;
+                var progress = (int)((double)processed / topics.Count * 100);
+
+                await _notifier.JobProgressAsync(userId, jobId, $"Topic {topic.TopicCode} işleniyor", progress);
+
                 var request = new ScriptGenerationRequest
                 {
                     SystemPrompt = systemPrompt,
@@ -125,8 +133,6 @@ namespace Application.Services
                     ProfileId = profile.Id,
                     UserId = userId,
                     ExtraParameters = creds,
-
-                    // topic bağlamı
                     Premise = topic.Premise,
                     Tone = topic.Tone,
                     PotentialVisual = topic.PotentialVisual
@@ -134,56 +140,65 @@ namespace Application.Services
 
                 try
                 {
-                    var scripts = await generator.GenerateScriptsAsync(request, ct);
+                    var resultScript = await generator.GenerateScriptsAsync(request, ct);
 
-                    // 🔹 Retry özelliği
-                    if (scripts.Count == 0 && profile.AllowRetry)
-                        scripts = await generator.GenerateScriptsAsync(request, ct);
+                    if (string.IsNullOrEmpty(resultScript) && profile.AllowRetry)
+                        resultScript = await generator.GenerateScriptsAsync(request, ct);
 
-                    if (scripts.Count == 0)
+                    if (string.IsNullOrEmpty(resultScript))
                     {
                         failedIds.Add(topic.Id);
                         continue;
                     }
 
-                    foreach (var s in scripts)
-                    {
-                        var entity = new Script
-                        {
-                            UserId = userId,
-                            TopicId = topic.Id,
-                            Title = s.Title ?? $"Script for {topic.TopicCode}",
-                            Content = s.Content,
-                            Summary = s.Summary,
-                            Language = s.Language ?? language,
-                            MetaJson = s.MetaJson
-                                ?? JsonSerializer.Serialize(new
-                                {
-                                    model,
-                                    temperature,
-                                    aiConn.Provider,
-                                    productionType,
-                                    renderStyle
-                                })
-                        };
 
-                        await _scriptRepo.AddAsync(entity, ct);
-                    }
+                    var entity = new Script
+                    {
+                        UserId = userId,
+                        TopicId = topic.Id,
+                        Title = $"Script for {topic.TopicCode}",
+                        Content = resultScript,
+                        Summary = null,
+                        Language = language,
+                        MetaJson =
+                             JsonSerializer.Serialize(new
+                             {
+                                 model,
+                                 temperature,
+                                 aiConn.Provider,
+                                 productionType,
+                                 renderStyle
+                             })
+                    };
+
+                    await _scriptRepo.AddAsync(entity, ct);
+
 
                     topic.ScriptGenerated = true;
                     topic.ScriptGeneratedAt = DateTimeOffset.Now;
                     generatedIds.Add(topic.Id);
+
+                    Thread.Sleep(15000);
                 }
                 catch (Exception ex)
                 {
                     failedIds.Add(topic.Id);
-                    Console.WriteLine($"❌ Script üretim hatası (Topic {topic.Id}): {ex.Message}");
+                    await _notifier.NotifyUserAsync(userId, "JobError", new
+                    {
+                        topicId = topic.Id,
+                        error = ex.Message
+                    });
                 }
             }
 
             await _uow.SaveChangesAsync(ct);
 
-            // 🔹 Sonuç modelini döndür
+            await _notifier.JobCompletedAsync(
+                userId,
+                jobId,
+                failedIds.Count == 0,
+                $"Script üretimi tamamlandı. Başarılı: {generatedIds.Count}, Hatalı: {failedIds.Count}");
+
             return new ScriptGenerationResult
             {
                 TotalRequested = topics.Count,
@@ -200,12 +215,16 @@ namespace Application.Services
             };
         }
 
+        /// <summary>
+        /// Belirli topic’ler için script üretimi (manuel seçimle).
+        /// </summary>
         public async Task<ScriptGenerationResult> GenerateForTopicsAsync(
-    int profileId,
-    IReadOnlyList<int> topicIds,
-    CancellationToken ct)
+            int profileId,
+            IReadOnlyList<int> topicIds,
+            CancellationToken ct)
         {
             var userId = _current.UserId;
+            var jobId = profileId;
 
             if (topicIds == null || topicIds.Count == 0)
                 throw new InvalidOperationException("Topic listesi boş olamaz.");
@@ -231,14 +250,12 @@ namespace Application.Services
             if (userId <= 0)
                 userId = profile.AppUserId;
 
-            // --- Credential çöz ---
             var credsJson = _secret.Unprotect(aiConn.EncryptedCredentialJson);
             var creds = JsonSerializer.Deserialize<Dictionary<string, string>>(credsJson)
                 ?? throw new InvalidOperationException("Geçersiz credential formatı.");
 
             var generator = _factory.Resolve(aiConn.Provider, creds);
 
-            // --- İlgili topic’leri al ---
             var topics = (await _topicRepo.FindAsync(
                 t => topicIds.Contains(t.Id)
                   && t.UserId == userId
@@ -250,7 +267,6 @@ namespace Application.Services
             if (topics.Count == 0)
                 throw new InvalidOperationException("Üretilebilecek uygun topic bulunamadı.");
 
-            // --- Ortak AI parametreleri ---
             var temperature = profile.Temperature > 0 ? profile.Temperature : 0.8;
             var model = creds.GetValueOrDefault("model", aiConn.TextModel);
             var productionType = profile.ProductionType ?? "video";
@@ -260,8 +276,14 @@ namespace Application.Services
             var generatedIds = new List<int>();
             var failedIds = new List<int>();
 
+            int processed = 0;
             foreach (var topic in topics)
             {
+                processed++;
+                var progress = (int)((double)processed / topics.Count * 100);
+
+                await _notifier.JobProgressAsync(userId, jobId, $"Topic {topic.TopicCode} işleniyor", progress);
+
                 var finalPrompt = prompt.Body
                     .Replace("{{PREMISE}}", topic.Premise ?? "")
                     .Replace("{{CATEGORY}}", topic.Category ?? "")
@@ -303,11 +325,17 @@ namespace Application.Services
                 catch (Exception ex)
                 {
                     failedIds.Add(topic.Id);
-                    Console.WriteLine($"❌ Script üretim hatası (Topic {topic.Id}): {ex.Message}");
+                    await _notifier.NotifyUserAsync(userId, "JobError", new { topicId = topic.Id, error = ex.Message });
                 }
             }
 
             await _uow.SaveChangesAsync(ct);
+
+            await _notifier.JobCompletedAsync(
+                userId,
+                jobId,
+                failedIds.Count == 0,
+                $"Script üretimi tamamlandı. Başarılı: {generatedIds.Count}, Hatalı: {failedIds.Count}");
 
             return new ScriptGenerationResult
             {
@@ -324,6 +352,5 @@ namespace Application.Services
                 RenderStyle = renderStyle
             };
         }
-
     }
 }

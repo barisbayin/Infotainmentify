@@ -1,5 +1,6 @@
 ﻿using Application.Services;
 using Core.Abstractions;
+using Infrastructure.Job;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,13 +13,16 @@ namespace WebAPI.Controllers
     {
         private readonly ScriptGenerationService _svc;
         private readonly ICurrentUserService _current;
+        private readonly BackgroundJobRunner _bgRunner;
 
         public ScriptGenerationController(
             ScriptGenerationService svc,
-            ICurrentUserService current)
+            ICurrentUserService current,
+            BackgroundJobRunner bgRunner)
         {
             _svc = svc;
             _current = current;
+            _bgRunner = bgRunner;
         }
 
         /// <summary>
@@ -81,6 +85,56 @@ namespace WebAPI.Controllers
                 return StatusCode(500, new { success = false, message = "Beklenmedik bir hata oluştu.", error = ex.Message });
             }
         }
+
+        /// <summary>
+        /// Seçilen ScriptGenerationProfile’a göre uygun topic’ler için script üretimini başlatır (arka plan job).
+        /// </summary>
+        [HttpPost("generate-async")]
+        public IActionResult GenerateAsync([FromQuery] int profileId)
+        {
+            if (profileId <= 0)
+                return BadRequest(new { success = false, message = "Geçersiz profil ID." });
+
+            var userId = _current.UserId;
+
+            _bgRunner.Run(async (sp, ct) =>
+            {
+                var svc = sp.GetRequiredService<ScriptGenerationService>();
+                await svc.GenerateFromProfileAsync(profileId, ct);
+            });
+
+            return Accepted(new
+            {
+                success = true,
+                message = "Script üretimi başlatıldı. İlerlemeyi SignalR üzerinden takip edebilirsiniz.",
+                userId,
+                profileId
+            });
+        }
+
+        /// <summary>
+        /// Belirli topic ID’leri için seçilen profile göre script üretimini başlatır (arka plan job).
+        /// </summary>
+        [HttpPost("generate-from-topics-async")]
+        public IActionResult GenerateFromTopicsAsync([FromBody] GenerateFromTopicsRequest req)
+        {
+            if (req.ProfileId <= 0)
+                return BadRequest(new { success = false, message = "Geçersiz profil ID." });
+
+            _bgRunner.Run(async (sp, ct) =>
+            {
+                var svc = sp.GetRequiredService<ScriptGenerationService>();
+                await svc.GenerateForTopicsAsync(req.ProfileId, req.TopicIds ?? new List<int>(), ct);
+            });
+
+            return Accepted(new
+            {
+                success = true,
+                message = "Script üretimi arka planda başlatıldı. İlerleme SignalR üzerinden izlenecek.",
+                startedAt = DateTime.UtcNow
+            });
+        }
+
     }
 
     public class GenerateFromTopicsRequest

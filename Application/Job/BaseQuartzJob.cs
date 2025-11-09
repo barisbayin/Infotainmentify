@@ -1,6 +1,6 @@
-﻿using Application.Services;
+﻿using Application.Abstractions;
+using Application.Services;
 using Core.Abstractions;
-using Core.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using Quartz;
 
@@ -24,6 +24,7 @@ namespace Application.Job
             var jobService = scope.ServiceProvider.GetRequiredService<JobSettingService>();
             var execService = scope.ServiceProvider.GetRequiredService<JobExecutionService>();
             var factory = scope.ServiceProvider.GetRequiredService<JobExecutorFactory>();
+            var notifier = scope.ServiceProvider.GetRequiredService<INotifierService>();
             var ct = context.CancellationToken;
 
             // 1️⃣ JobExecution kaydı başlat
@@ -47,11 +48,18 @@ namespace Application.Job
 
                 // 6️⃣ Başarılı olarak kaydet
                 await execService.CompleteExecutionAsync(exec.Id, message, ct);
+
+                // 7️⃣ Bildirim gönder 🎉
+                await notifier.JobCompletedAsync(jobEntity.AppUserId, jobId, success: true, message);
             }
             catch (Exception ex)
             {
-                // 7️⃣ Hatalı olarak kaydet
+                // 8️⃣ Hatalı olarak kaydet
                 await execService.FailExecutionAsync(exec.Id, ex.Message, ct);
+
+                // 9️⃣ Bildirim gönder ❌
+                await scope.ServiceProvider.GetRequiredService<INotifierService>()
+                    .JobCompletedAsync(exec.Job.AppUserId, jobId, success: false, ex.Message);
             }
         }
     }

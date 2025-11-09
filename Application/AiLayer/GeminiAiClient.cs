@@ -129,7 +129,7 @@ namespace Application.AiLayer
         // ------------------------------------------
         // 🧩 Script Generation (Structured JSON)
         // ------------------------------------------
-        public async Task<IReadOnlyList<ScriptResult>> GenerateScriptsAsync(
+        public async Task<string> GenerateScriptsAsync(
             ScriptGenerationRequest request,
             CancellationToken ct = default)
         {
@@ -158,13 +158,13 @@ namespace Application.AiLayer
 
             try
             {
-                var scripts = JsonSerializer.Deserialize<List<ScriptResult>>(result,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                //var scripts = JsonSerializer.Deserialize<List<ScriptResult>>(result,
+                //    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                if (scripts == null || scripts.Count == 0)
-                    throw new InvalidOperationException("Gemini boş veya geçersiz ScriptResult JSON döndürdü.");
+                if (result == null || string.IsNullOrEmpty(result))
+                    throw new InvalidOperationException("Gemini boş veya geçersiz string döndürdü.");
 
-                return scripts;
+                return result;
             }
             catch (Exception ex)
             {

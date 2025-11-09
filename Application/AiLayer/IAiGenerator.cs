@@ -38,7 +38,7 @@ namespace Application.AiLayer
         /// <summary>
         /// Yapılandırılmış script üretimi (structured JSON output).
         /// </summary>
-        Task<IReadOnlyList<ScriptResult>> GenerateScriptsAsync(
+        Task<string> GenerateScriptsAsync(
             ScriptGenerationRequest request,
             CancellationToken ct = default);
 

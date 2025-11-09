@@ -13,7 +13,7 @@ namespace Application.Mappers
         private static readonly Dictionary<JobType, Type> _map = new()
         {
             { JobType.TopicGeneration, typeof(TopicGenerationProfile) },
-            //{ JobType.StoryGeneration, typeof(StoryGenerationProfile) },
+            { JobType.ScriptGeneration, typeof(ScriptGenerationProfile) },
             //{ JobType.YouTubeUpload, typeof(YouTubeUploadProfile) },
             //{ JobType.ThumbnailRender, typeof(ThumbnailRenderProfile) }
         };

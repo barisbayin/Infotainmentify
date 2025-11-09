@@ -16,14 +16,26 @@
         public bool AllowRetry { get; set; }
         public string Status { get; set; } = default!;
 
-        // 🔗 İlişkisel bilgiler
+        // 🔗 Ana AI Bilgileri
         public int AiConnectionId { get; set; }
         public string AiConnectionName { get; set; } = default!;
-        public string AiProvider { get; set; } = default!; // örn: "OpenAI", "Gemini"
+        public string AiProvider { get; set; } = default!;
 
+        // 🎨 Görsel AI
+        public int? ImageAiConnectionId { get; set; }
+        public string? ImageAiConnectionName { get; set; }
+
+        // 🗣️ TTS AI
+        public int? TtsAiConnectionId { get; set; }
+        public string? TtsAiConnectionName { get; set; }
+
+        // 🎬 Video AI
+        public int? VideoAiConnectionId { get; set; }
+        public string? VideoAiConnectionName { get; set; }
+
+        // 🧩 Bağlantılı Prompt & Topic Profili
         public int PromptId { get; set; }
         public string PromptName { get; set; } = default!;
-
         public int? TopicGenerationProfileId { get; set; }
         public string? TopicGenerationProfileName { get; set; }
     }

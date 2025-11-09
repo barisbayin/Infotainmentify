@@ -5,7 +5,6 @@ using Application.Job;
 using Application.Options;
 using Application.Services;
 using Core.Abstractions;
-using Core.Contracts;
 using Core.Entity;
 using Core.Security;
 using FluentValidation;
@@ -23,6 +22,7 @@ using Quartz;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
+using WebAPI.Hubs;
 using WebAPI.Service;
 
 namespace WebAPI
@@ -63,6 +63,7 @@ namespace WebAPI
             builder.Services.AddScoped<ScriptService>();
             builder.Services.AddScoped<ScriptGenerationProfileService>();
             builder.Services.AddScoped<JobExecutorFactory>();
+            builder.Services.AddScoped<BackgroundJobRunner>();
             //builder.Services.AddScoped<TopicGenerationService>();
 
             builder.Services.AddHttpContextAccessor();
@@ -87,6 +88,7 @@ namespace WebAPI
             builder.Services.AddSingleton<IUserDirectoryService, UserDirectoryService>();
 
             builder.Services.AddScoped<IJobExecutor, TopicGenerationJobExecutor>();
+            builder.Services.AddScoped<IJobExecutor, ScriptGenerationJobExecutor>();
 
             //builder.Services.AddScoped<IJobExecutor, StoryGenerationJobExecutor>();
 
@@ -105,7 +107,8 @@ namespace WebAPI
             });
 
 
-
+            builder.Services.AddSignalR();
+            builder.Services.AddScoped<INotifierService, SignalRNotifierService>();
 
             builder.Services.AddControllers()
               .AddJsonOptions(o =>
@@ -127,6 +130,22 @@ namespace WebAPI
                         ValidAudience = builder.Configuration["Jwt:Audience"],
                         IssuerSigningKey = new SymmetricSecurityKey(
                             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+                    };
+
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var accessToken = context.Request.Query["access_token"];
+                            var path = context.HttpContext.Request.Path;
+
+                            if (!string.IsNullOrEmpty(accessToken) &&
+                                path.StartsWithSegments("/api/hubs/notify", StringComparison.OrdinalIgnoreCase))
+                            {
+                                context.Token = accessToken;
+                            }
+                            return Task.CompletedTask;
+                        }
                     };
                 });
 
@@ -188,16 +207,15 @@ namespace WebAPI
                 app.UseSwaggerUI();
             }
 
+
+            app.UseRouting();
             app.UseCors(CorsPolicy);
-
-            app.UseHttpsRedirection();
-
-            app.UseAuthentication();                // (varsa)
+            app.UseAuthentication();
             app.UseAuthorization();
-  
-
-
+            app.UseWebSockets();
+            app.UseHttpsRedirection();
             app.MapControllers();
+            app.MapHub<NotifyHub>("/hubs/notify");
 
             app.Run();
         }

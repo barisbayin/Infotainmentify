@@ -30,7 +30,11 @@ namespace Application.Services
                 ct: ct,
                 x => x.Prompt,
                 x => x.AiConnection,
-                x => x.TopicGenerationProfile);
+                x => x.TopicGenerationProfile,
+                x => x.ImageAiConnection,
+                x => x.TtsAiConnection,
+                x => x.VideoAiConnection
+            );
 
             return list.Select(x => x.ToListDto()).ToList();
         }
@@ -46,7 +50,10 @@ namespace Application.Services
                 include: q => q
                     .Include(x => x.Prompt)
                     .Include(x => x.AiConnection)
-                    .Include(x => x.TopicGenerationProfile),
+                    .Include(x => x.TopicGenerationProfile)
+                    .Include(x => x.ImageAiConnection)
+                    .Include(x => x.TtsAiConnection)
+                    .Include(x => x.VideoAiConnection),
                 asNoTracking: true,
                 ct: ct);
 
@@ -91,7 +98,27 @@ namespace Application.Services
                     ProductionType = dto.ProductionType,
                     RenderStyle = dto.RenderStyle,
                     IsPublic = dto.IsPublic,
-                    AllowRetry = dto.AllowRetry
+                    AllowRetry = dto.AllowRetry,
+
+                    // 🎨 Image
+                    ImageAiConnectionId = dto.ImageAiConnectionId,
+                    ImageModelName = dto.ImageModelName,
+                    ImageRenderStyle = dto.ImageRenderStyle,
+                    ImageAspectRatio = dto.ImageAspectRatio ?? "16:9",
+
+                    // 🗣️ TTS
+                    TtsAiConnectionId = dto.TtsAiConnectionId,
+                    TtsModelName = dto.TtsModelName,
+                    TtsVoice = dto.TtsVoice,
+
+                    // 🎬 Video
+                    VideoAiConnectionId = dto.VideoAiConnectionId,
+                    VideoModelName = dto.VideoModelName,
+                    VideoTemplate = dto.VideoTemplate,
+
+                    // 🔄 Auto Flags
+                    AutoGenerateAssets = dto.AutoGenerateAssets,
+                    AutoRenderVideo = dto.AutoRenderVideo
                 };
 
                 await _repo.AddAsync(e, ct);
@@ -122,6 +149,26 @@ namespace Application.Services
             entity.RenderStyle = dto.RenderStyle;
             entity.IsPublic = dto.IsPublic;
             entity.AllowRetry = dto.AllowRetry;
+
+            // 🎨 Image
+            entity.ImageAiConnectionId = dto.ImageAiConnectionId;
+            entity.ImageModelName = dto.ImageModelName;
+            entity.ImageRenderStyle = dto.ImageRenderStyle;
+            entity.ImageAspectRatio = dto.ImageAspectRatio ?? "16:9";
+
+            // 🗣️ TTS
+            entity.TtsAiConnectionId = dto.TtsAiConnectionId;
+            entity.TtsModelName = dto.TtsModelName;
+            entity.TtsVoice = dto.TtsVoice;
+
+            // 🎬 Video
+            entity.VideoAiConnectionId = dto.VideoAiConnectionId;
+            entity.VideoModelName = dto.VideoModelName;
+            entity.VideoTemplate = dto.VideoTemplate;
+
+            // 🔄 Auto Flags
+            entity.AutoGenerateAssets = dto.AutoGenerateAssets;
+            entity.AutoRenderVideo = dto.AutoRenderVideo;
 
             _repo.Update(entity);
             await _uow.SaveChangesAsync(ct);

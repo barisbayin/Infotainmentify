@@ -42,9 +42,12 @@ namespace WebAPI.Controllers
         }
 
         // ---------------- UPSERT ----------------
-        [HttpPost("save")]
+        [HttpPost("save")] // veya sadece [HttpPost]
         public async Task<IActionResult> Upsert([FromBody] ScriptGenerationProfileDetailDto dto, CancellationToken ct)
         {
+            if (dto == null)
+                return BadRequest(new { message = "Veri alınamadı." });
+
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
@@ -56,6 +59,10 @@ namespace WebAPI.Controllers
             catch (InvalidOperationException ex)
             {
                 return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
             }
         }
 
