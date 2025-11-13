@@ -14,9 +14,9 @@ namespace Application.AiLayer
         // 🔹 Credential bilgilerini runtime’da initialize eder
         void Initialize(IReadOnlyDictionary<string, string> credentials);
 
-        // -------------------------------
-        // 🧠 Metin Üretimi
-        // -------------------------------
+        // ======================================================
+        // 🧠 METİN ÜRETİMİ
+        // ======================================================
 
         /// <summary>
         /// Basit text üretimi (tek prompt).
@@ -34,7 +34,6 @@ namespace Application.AiLayer
             TopicGenerationRequest request,
             CancellationToken ct = default);
 
-
         /// <summary>
         /// Yapılandırılmış script üretimi (structured JSON output).
         /// </summary>
@@ -42,26 +41,40 @@ namespace Application.AiLayer
             ScriptGenerationRequest request,
             CancellationToken ct = default);
 
-        // -------------------------------
-        // 🎨 Görsel Üretimi
-        // -------------------------------
+        // ======================================================
+        // 🎨 GÖRSEL ÜRETİMİ
+        // ======================================================
         Task<byte[]> GenerateImageAsync(
             string prompt,
-            string size = "1024x1024",
+            string size = "1080x1920",
             string? style = null,
+            string? model = null,
             CancellationToken ct = default);
 
-        // -------------------------------
-        // 🔤 Embedding (vektör temsili)
-        // -------------------------------
+        // ======================================================
+        // 🎙️ SES (TTS) ÜRETİMİ
+        // ======================================================
+        /// <summary>
+        /// Metinden ses üretir (TTS). Dönüş değeri MP3/WAV formatlı byte dizisidir.
+        /// </summary>
+        Task<byte[]> GenerateAudioAsync(
+            string text,
+            string? voice = null,
+            string? model = null,
+            string? format = "mp3",
+            CancellationToken ct = default);
+
+        // ======================================================
+        // 🔤 EMBEDDING (vektör temsili)
+        // ======================================================
         Task<float[]> GetEmbeddingAsync(
             string text,
             string? model = null,
             CancellationToken ct = default);
 
-        // -------------------------------
-        // 💚 Health Check
-        // -------------------------------
+        // ======================================================
+        // 💚 HEALTH CHECK
+        // ======================================================
         Task<bool> TestConnectionAsync(CancellationToken ct = default);
     }
 }

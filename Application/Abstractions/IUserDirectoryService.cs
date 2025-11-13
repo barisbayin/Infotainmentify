@@ -11,6 +11,7 @@ namespace Application.Abstractions
         string GetRenders(AppUser user);                    // .../renders
         string GetTemp(AppUser user);                       // .../temp
         string GetCache(AppUser user);                      // .../cache
+        string GetScriptDirectory(int userId, int scriptId);
 
         Task EnsureUserScaffoldAsync(AppUser user, CancellationToken ct = default);
     }

@@ -96,6 +96,7 @@ namespace Application.AiLayer
             string prompt,
             string size = "1024x1024",
             string? style = null,
+            string? model = null,
             CancellationToken ct = default)
         {
             var payload = new
@@ -160,7 +161,55 @@ namespace Application.AiLayer
         {
             throw new NotImplementedException();
         }
-    }
 
+        public async Task<byte[]> GenerateAudioAsync(
+            string text,
+            string? voice = null,
+            string? model = null,
+            string? format = "mp3",
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(_apiKey))
+                throw new InvalidOperationException("OpenAI client not initialized — missing API key.");
+
+            // 🎙️ Voice fallback
+            var voiceName = voice ?? "alloy";
+
+            // 🧠 Model fallback (örnek: gpt-4o-mini-tts)
+            var modelName = model ?? "gpt-4o-mini-tts";
+
+            // 🔊 Format fallback
+            var fmt = format?.ToLowerInvariant() switch
+            {
+                "wav" => "wav",
+                "flac" => "flac",
+                _ => "mp3"
+            };
+
+            var payload = new
+            {
+                model = modelName,
+                input = text,
+                voice = voiceName,
+                format = fmt
+            };
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/audio/speech");
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+            req.Content = JsonContent.Create(payload);
+
+            var res = await _http.SendAsync(req, ct);
+
+            if (!res.IsSuccessStatusCode)
+            {
+                var err = await res.Content.ReadAsStringAsync(ct);
+                throw new InvalidOperationException($"OpenAI TTS Error ({res.StatusCode}): {err}");
+            }
+
+            // ✅ API binary ses verisini direkt döndürür
+            var bytes = await res.Content.ReadAsByteArrayAsync(ct);
+            return bytes;
+        }
+    }
 
 }

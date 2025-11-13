@@ -47,7 +47,7 @@ namespace WebAPI
             builder.Services.AddInfrastructure(builder.Configuration);
             builder.Services.AddAppQuartz();
 
-    
+
 
             builder.Services.AddScoped<PromptService>();
             builder.Services.AddScoped<TopicService>();
@@ -64,6 +64,10 @@ namespace WebAPI
             builder.Services.AddScoped<ScriptGenerationProfileService>();
             builder.Services.AddScoped<JobExecutorFactory>();
             builder.Services.AddScoped<BackgroundJobRunner>();
+            builder.Services.AddScoped<VideoAssetService>();
+            builder.Services.AddScoped<AssetGenerationService>();
+            builder.Services.AddScoped<AutoVideoAssetProfileService>();
+            builder.Services.AddScoped<AutoVideoAssetService>();
             //builder.Services.AddScoped<TopicGenerationService>();
 
             builder.Services.AddHttpContextAccessor();
@@ -89,6 +93,9 @@ namespace WebAPI
 
             builder.Services.AddScoped<IJobExecutor, TopicGenerationJobExecutor>();
             builder.Services.AddScoped<IJobExecutor, ScriptGenerationJobExecutor>();
+
+            builder.Services.AddScoped<IFFmpegService, FFmpegService>();
+
 
             //builder.Services.AddScoped<IJobExecutor, StoryGenerationJobExecutor>();
 

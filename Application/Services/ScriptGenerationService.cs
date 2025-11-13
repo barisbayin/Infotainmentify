@@ -168,7 +168,8 @@ namespace Application.Services
                                  aiConn.Provider,
                                  productionType,
                                  renderStyle
-                             })
+                             }),
+                        ScriptGenerationProfileId = profile.Id,
                     };
 
                     await _scriptRepo.AddAsync(entity, ct);

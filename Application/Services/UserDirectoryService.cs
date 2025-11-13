@@ -33,6 +33,14 @@ namespace Application.Services
         public string GetCache(AppUser user)
             => Path.Combine(GetUserRoot(user), "cache");
 
+        public string GetScriptDirectory(int userId, int scriptId)
+        {
+            var userDir = Path.Combine(GetAppFilesRoot(), $"user_{userId}");
+            var dir = Path.Combine(userDir, "video_projects", $"script_{scriptId:D6}");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+
         public async Task EnsureUserScaffoldAsync(AppUser user, CancellationToken ct = default)
         {
             var root = GetAppFilesRoot();

@@ -1,6 +1,9 @@
 ﻿using Application.Models;
 using Core.Enums;
+using Google.Apis.Auth.OAuth2;
+using Google.Cloud.TextToSpeech.V1;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 namespace Application.AiLayer
@@ -11,6 +14,7 @@ namespace Application.AiLayer
         private IReadOnlyDictionary<string, string>? _creds;
         private string _apiKey = string.Empty;
         private string _model = "gemini-2.5-flash";
+        private string _credentialJson = string.Empty;
 
         public AiProviderType ProviderType => AiProviderType.GoogleVertex;
 
@@ -23,13 +27,24 @@ namespace Application.AiLayer
         // 🔹 Credential bilgilerini runtime’da set ediyoruz
         public void Initialize(IReadOnlyDictionary<string, string> creds)
         {
-            _creds = creds;
-            _apiKey = creds.TryGetValue("apiKey", out var key)
-                ? key
-                : throw new InvalidOperationException("Gemini apiKey missing");
+            _creds = creds ?? throw new ArgumentNullException(nameof(creds));
 
-            if (creds.TryGetValue("model", out var model))
+            // 🔹 1. API Key varsa al
+            _apiKey = creds.TryGetValue("apiKey", out var key) && !string.IsNullOrWhiteSpace(key)
+                ? key
+                : null;
+
+            // 🔹 2. Credential JSON varsa al
+            if (creds.TryGetValue("credentialJson", out var json) && !string.IsNullOrWhiteSpace(json))
+                _credentialJson = json;
+
+            // 🔹 3. Model bilgisi
+            if (creds.TryGetValue("model", out var model) && !string.IsNullOrWhiteSpace(model))
                 _model = model;
+
+            // 🔸 En az biri dolu olmalı (apiKey veya credentialJson)
+            if (string.IsNullOrWhiteSpace(_apiKey) && string.IsNullOrWhiteSpace(_credentialJson))
+                throw new InvalidOperationException("AI connection missing authentication data (apiKey or credentialJson).");
         }
 
         public async Task<string> GenerateTextAsync(
@@ -172,8 +187,170 @@ namespace Application.AiLayer
             }
         }
 
-        public Task<byte[]> GenerateImageAsync(string prompt, string size = "1024x1024", string? style = null, CancellationToken ct = default)
-            => Task.FromResult(Array.Empty<byte>());
+        public async Task<byte[]> GenerateAudioAsync(
+      string text,
+      string? voice = null,
+      string? model = null,
+      string? format = "mp3",
+      CancellationToken ct = default)
+        {
+            string test = @"{""installed"":{""client_id"":""605927763233-p9f6f6qg905mijeo0248m3fr3d079km6.apps.googleusercontent.com"",""project_id"":""gen-lang-client-0838431249"",""auth_uri"":""https://accounts.google.com/o/oauth2/auth"",""token_uri"":""https://oauth2.googleapis.com/token"",""auth_provider_x509_cert_url"":""https://www.googleapis.com/oauth2/v1/certs"",""client_secret"":""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"",""redirect_uris"":[""http://localhost""]}}";
+            //if (string.IsNullOrWhiteSpace(_credentialJson))
+            //    throw new InvalidOperationException("Google TTS için credential JSON eksik.");
+
+            // 🔒 JSON string'ten GoogleCredential oluştur (resmi ve stabil yöntem)
+
+            GoogleCredential googleCred;
+            using (var ms = new MemoryStream(Encoding.UTF8.GetBytes(test)))
+            {
+                googleCred = GoogleCredential
+                    .FromStream(ms)
+                    .CreateScoped("https://www.googleapis.com/auth/cloud-platform");
+            }
+
+            // 🎧 TextToSpeech client oluştur
+            var client = await new TextToSpeechClientBuilder
+            {
+                Credential = googleCred
+            }.BuildAsync(ct);
+
+            // 🔊 Ses seçimi
+            var voiceName = voice ?? "Charon";
+            var languageCode = voiceName.StartsWith("tr", StringComparison.OrdinalIgnoreCase)
+                ? "tr-TR"
+                : "en-US";
+
+            // 🔹 Model ve format
+            var modelName = model ?? "gemini-2.5-pro-tts";
+            var encoding = format?.ToLowerInvariant() == "wav"
+                ? AudioEncoding.Linear16
+                : AudioEncoding.Mp3;
+
+            // 🧾 İstek nesnesi
+            var req = new SynthesizeSpeechRequest
+            {
+                Input = new SynthesisInput { Text = text },
+                Voice = new VoiceSelectionParams
+                {
+                    LanguageCode = languageCode,
+                    Name = voiceName,
+                    ModelName = modelName
+                },
+                AudioConfig = new AudioConfig
+                {
+                    AudioEncoding = encoding,
+                    SpeakingRate = 1.0,
+                    Pitch = 0.0
+                }
+            };
+
+            // 🚀 API çağrısı
+            var resp = await client.SynthesizeSpeechAsync(req, cancellationToken: ct);
+
+            return resp.AudioContent.ToByteArray();
+        }
+
+
+
+
+        public async Task<byte[]> GenerateImageAsync(
+    string prompt,
+    string size = "1080x1920",
+    string? style = null,
+    string? model = null,
+    CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(_apiKey))
+                throw new InvalidOperationException("Gemini client not initialized — missing API key.");
+
+            // 🔹 Model fallback
+            model ??= _model ?? "gemini-2.5-flash-image";
+
+            // 🔹 Prompt ve stil birleştiriliyor
+            var fullPrompt = string.IsNullOrWhiteSpace(style)
+                ? prompt.Trim()
+                : $"{prompt.Trim()}\n\nStyle: {style.Trim()}";
+
+            // 🔹 Dikey / yatay oran belirle
+            var aspect = size switch
+            {
+                "1080x1920" or "9:16" => "9:16",
+                "1920x1080" or "16:9" => "16:9",
+                _ => "1:1"
+            };
+
+            // 🔹 Request payload (generateContent formatı)
+            var payload = new
+            {
+                contents = new[]
+                {
+            new
+            {
+                role = "user",
+                parts = new object[]
+                {
+                    new { text = fullPrompt }
+                }
+            }
+        },
+                generationConfig = new
+                {
+                    responseModalities = new[] { "IMAGE" },
+                    imageConfig = new
+                    {
+                        aspectRatio = aspect
+                    },
+                    temperature = 0.7
+                }
+            };
+
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={_apiKey}";
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromMinutes(5)); // Görsel üretimi uzun sürebilir
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Headers.Add("x-goog-api-key", _apiKey);
+            req.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+            req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            using var res = await _http.SendAsync(req, cts.Token);
+            var json = await res.Content.ReadAsStringAsync(ct);
+
+            if (!res.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Gemini Image API Error ({res.StatusCode}): {json}");
+
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+
+                // 🎨 "inline_data.data" veya "inlineData.data" altında base64 görsel olabilir
+                string? base64 = null;
+                if (doc.RootElement.TryGetProperty("candidates", out var candidates))
+                {
+                    foreach (var part in candidates[0].GetProperty("content").GetProperty("parts").EnumerateArray())
+                    {
+                        if (part.TryGetProperty("inline_data", out var idata) && idata.TryGetProperty("data", out var d1))
+                            base64 = d1.GetString();
+                        else if (part.TryGetProperty("inlineData", out var idata2) && idata2.TryGetProperty("data", out var d2))
+                            base64 = d2.GetString();
+
+                        if (!string.IsNullOrWhiteSpace(base64))
+                            break;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(base64))
+                    throw new InvalidOperationException("Gemini image generation boş veya geçersiz yanıt döndürdü.");
+
+                return Convert.FromBase64String(base64);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Gemini image parse error: {ex.Message}\nRaw: {json[..Math.Min(json.Length, 600)]}");
+            }
+        }
+
 
         public Task<float[]> GetEmbeddingAsync(string text, string? model = null, CancellationToken ct = default)
             => Task.FromResult(Array.Empty<float>());
