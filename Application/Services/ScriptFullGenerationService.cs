@@ -12,6 +12,7 @@ namespace Application.Services
     /// </summary>
     public class ScriptFullGenerationService
     {
+        /*
         private readonly AssetGenerationService _assetGen;
         private readonly IRepository<Script> _scriptRepo;
         private readonly IRepository<VideoAsset> _videoAssetRepo;
@@ -92,7 +93,7 @@ namespace Application.Services
                     AssetKey = $"scene_{scene.Index:D3}_video",
                     FilePath = scene.VideoGeneratedPath,
                     IsGenerated = true,
-                    GeneratedAt = DateTime.UtcNow
+                    GeneratedAt = DateTime.Now
                 }, ct);
 
                 sceneVideos.Add(sceneVideo);
@@ -116,7 +117,7 @@ namespace Application.Services
                 AssetKey = "final_render",
                 FilePath = finalPath.Replace("\\", "/"),
                 IsGenerated = true,
-                GeneratedAt = DateTime.UtcNow,
+                GeneratedAt = DateTime.Now,
                 MetadataJson = JsonSerializer.Serialize(new
                 {
                     Duration = duration,
@@ -128,7 +129,7 @@ namespace Application.Services
             dto.Render = new ScriptRenderInfo
             {
                 FilePath = finalPath.Replace("\\", "/"),
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
                 DurationSeconds = duration,
                 Format = "mp4",
                 Resolution = "1080x1920",
@@ -144,5 +145,6 @@ namespace Application.Services
 
             return "Tüm üretim adımları tamamlandı.";
         }
+        */
     }
 }

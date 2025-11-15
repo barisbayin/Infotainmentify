@@ -188,66 +188,93 @@ namespace Application.AiLayer
         }
 
         public async Task<byte[]> GenerateAudioAsync(
-      string text,
-      string? voice = null,
-      string? model = null,
-      string? format = "mp3",
-      CancellationToken ct = default)
+     string text,
+     string? voice = null,
+     string? model = null,
+     string? format = "mp3",
+     CancellationToken ct = default)
         {
-            string test = @"{""installed"":{""client_id"":""605927763233-p9f6f6qg905mijeo0248m3fr3d079km6.apps.googleusercontent.com"",""project_id"":""gen-lang-client-0838431249"",""auth_uri"":""https://accounts.google.com/o/oauth2/auth"",""token_uri"":""https://oauth2.googleapis.com/token"",""auth_provider_x509_cert_url"":""https://www.googleapis.com/oauth2/v1/certs"",""client_secret"":""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"",""redirect_uris"":[""http://localhost""]}}";
-            //if (string.IsNullOrWhiteSpace(_credentialJson))
-            //    throw new InvalidOperationException("Google TTS için credential JSON eksik.");
+            if (string.IsNullOrWhiteSpace(_apiKey))
+                throw new InvalidOperationException("Gemini client not initialized — missing API key.");
 
-            // 🔒 JSON string'ten GoogleCredential oluştur (resmi ve stabil yöntem)
+            // ---------------------------
+            // Model fallback
+            // ---------------------------
+            string useModel = model ?? "gemini-2.5-flash-tts";
 
-            GoogleCredential googleCred;
-            using (var ms = new MemoryStream(Encoding.UTF8.GetBytes(test)))
+            // ---------------------------
+            // Voice fallback
+            // ---------------------------
+            string useVoice = voice ?? "charon";
+
+            // ---------------------------
+            // Format fallback
+            // ---------------------------
+            string mime = format?.ToLower() == "wav"
+                ? "audio/wav"
+                : "audio/mp3";
+
+            // ---------------------------
+            // Gemini TTS payload
+            // ---------------------------
+            var payload = new
             {
-                googleCred = GoogleCredential
-                    .FromStream(ms)
-                    .CreateScoped("https://www.googleapis.com/auth/cloud-platform");
+                contents = new[]
+                {
+            new {
+                role = "user",
+                parts = new object[]
+                {
+                    new { text = text }
+                }
             }
-
-            // 🎧 TextToSpeech client oluştur
-            var client = await new TextToSpeechClientBuilder
-            {
-                Credential = googleCred
-            }.BuildAsync(ct);
-
-            // 🔊 Ses seçimi
-            var voiceName = voice ?? "Charon";
-            var languageCode = voiceName.StartsWith("tr", StringComparison.OrdinalIgnoreCase)
-                ? "tr-TR"
-                : "en-US";
-
-            // 🔹 Model ve format
-            var modelName = model ?? "gemini-2.5-pro-tts";
-            var encoding = format?.ToLowerInvariant() == "wav"
-                ? AudioEncoding.Linear16
-                : AudioEncoding.Mp3;
-
-            // 🧾 İstek nesnesi
-            var req = new SynthesizeSpeechRequest
-            {
-                Input = new SynthesisInput { Text = text },
-                Voice = new VoiceSelectionParams
+        },
+                generationConfig = new
                 {
-                    LanguageCode = languageCode,
-                    Name = voiceName,
-                    ModelName = modelName
-                },
-                AudioConfig = new AudioConfig
-                {
-                    AudioEncoding = encoding,
-                    SpeakingRate = 1.0,
-                    Pitch = 0.0
+                    responseMimeType = mime,
+                    voiceName = useVoice
                 }
             };
 
-            // 🚀 API çağrısı
-            var resp = await client.SynthesizeSpeechAsync(req, cancellationToken: ct);
+            // ---------------------------
+            // Request
+            // ---------------------------
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{useModel}:generateContent?key={_apiKey}";
 
-            return resp.AudioContent.ToByteArray();
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+            req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            var res = await _http.SendAsync(req, ct);
+            var json = await res.Content.ReadAsStringAsync(ct);
+
+            if (!res.IsSuccessStatusCode)
+                throw new Exception($"Gemini TTS Error ({res.StatusCode}): {json}");
+
+            // ---------------------------
+            // Parse audio base64
+            // ---------------------------
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+
+                string? base64 = doc.RootElement
+                    .GetProperty("candidates")[0]
+                    .GetProperty("content")
+                    .GetProperty("parts")[0]
+                    .GetProperty("audio")
+                    .GetProperty("data")
+                    .GetString();
+
+                if (string.IsNullOrWhiteSpace(base64))
+                    throw new Exception("Audio data boş.");
+
+                return Convert.FromBase64String(base64);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Gemini TTS parse error: {ex.Message}\nRaw: {json}");
+            }
         }
 
 

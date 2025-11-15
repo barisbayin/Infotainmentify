@@ -68,5 +68,55 @@ namespace Application.Services
             u = Regex.Replace(u, @"[^a-z0-9_]", "");
             return string.IsNullOrWhiteSpace(u) ? "user" : u;
         }
+
+
+        public string GetVideoPipelinesRoot(AppUser user, int pipelineId)
+            => Path.Combine(GetUserRoot(user), "video_pipelines", pipelineId.ToString());
+
+        public string GetPipelineAssetsRoot(AppUser user, int pipelineId)
+            => Path.Combine(GetVideoPipelinesRoot(user, pipelineId), "assets");
+
+        public string GetPipelineImages(AppUser user, int pipelineId)
+            => Path.Combine(GetPipelineAssetsRoot(user, pipelineId), "images");
+
+        public string GetPipelineAudio(AppUser user, int pipelineId)
+            => Path.Combine(GetPipelineAssetsRoot(user, pipelineId), "audio");
+
+        public string GetPipelineRenderRoot(AppUser user, int pipelineId)
+            => Path.Combine(GetVideoPipelinesRoot(user, pipelineId), "render");
+
+        public string GetPipelineFinalRoot(AppUser user, int pipelineId)
+            => Path.Combine(GetVideoPipelinesRoot(user, pipelineId), "final");
+
+        public string GetPipelineTemp(AppUser user, int pipelineId)
+            => Path.Combine(GetVideoPipelinesRoot(user, pipelineId), "temp");
+
+
+
+        public string GetPipelineRaw(AppUser user, int pipelineId)
+        {
+            throw new NotImplementedException();
+        }
+
+
+        public string GetPipelineSceneRenders(AppUser user, int pipelineId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public string GetPipelineMergedRender(AppUser user, int pipelineId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public string GetVideoPipelinesRoot(AppUser user)
+        {
+            throw new NotImplementedException();
+        }
+
+        public string GetVideoPipelineRoot(AppUser user, int pipelineId)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

@@ -161,5 +161,109 @@ namespace Application.Services
 
             return $"{entities.Count} adet konu başarıyla üretildi.";
         }
+
+        public async Task<Topic> GenerateSingleAsync(int topicProfileId, CancellationToken ct)
+        {
+            var userId = _current.UserId;
+
+            // Profil al
+            var profile = await _profileRepo.GetByIdAsync(topicProfileId, asNoTracking: true, ct)
+                ?? throw new InvalidOperationException("TopicGenerationProfile bulunamadı.");
+
+            // Prompt
+            var prompt = await _promptRepo.GetByIdAsync(profile.PromptId, asNoTracking: true, ct)
+                ?? throw new InvalidOperationException("Prompt bulunamadı.");
+
+            // AI bağlantısı
+            var aiConn = await _aiRepo.GetByIdAsync(profile.AiConnectionId, asNoTracking: true, ct)
+                ?? throw new InvalidOperationException("AI bağlantısı bulunamadı.");
+
+            if (!aiConn.IsActive)
+                throw new InvalidOperationException("AI bağlantısı pasif, işlem yapılamaz.");
+
+            // Credential çöz
+            var credsJson = _secret.Unprotect(aiConn.EncryptedCredentialJson);
+            var creds = JsonSerializer.Deserialize<Dictionary<string, string>>(credsJson)
+                ?? throw new InvalidOperationException("Geçersiz credential formatı.");
+
+            var generator = _factory.Resolve(aiConn.Provider, creds);
+
+            // System prompt + user prompt hazırlama (Count = 1)
+            var systemPrompt = (prompt.SystemPrompt ?? string.Empty)
+                .Replace("{{COUNT}}", "1")
+                .Replace("{{LANGUAGE}}", profile.Language ?? "en-US")
+                .Replace("{{COUNT * 2}}", "2");
+
+            var userPrompt = (prompt.Body ?? string.Empty)
+                .Replace("{{COUNT}}", "1")
+                .Replace("{{LANGUAGE}}", profile.Language ?? "en-US")
+                .Replace("{{COUNT * 2}}", "2");
+
+            // Tek topic üretim isteği
+            var request = new TopicGenerationRequest
+            {
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
+                Count = 1,
+                Model = profile.ModelName ?? creds.GetValueOrDefault("model", aiConn.TextModel),
+                Temperature = profile.Temperature,
+                Language = profile.Language ?? "en",
+                MaxTokens = profile.MaxTokens,
+                OutputMode = profile.OutputMode ?? "Topic",
+                ProductionType = profile.ProductionType ?? "shorts",
+                RenderStyle = profile.RenderStyle ?? "default",
+                TagsJson = profile.TagsJson,
+                ProfileId = profile.Id,
+                UserId = userId,
+                ExtraParameters = creds
+            };
+
+            // ---- AI çağrısı ----
+            var list = await generator.GenerateTopicsAsync(request, ct);
+            if (list.Count == 0)
+                throw new Exception("Topic üretilemedi.");
+
+            var gen = list.First();
+
+            // ---- Topic entity üret ----
+            var now = DateTime.Now;
+
+            var topic = new Topic
+            {
+                UserId = userId,
+                PromptId = prompt.Id,
+                TopicCode = $"T{topicProfileId}_{now:yyyyMMddHHmmss}_001",
+
+                // AI'dan gelen alanlar
+                Premise = gen.Premise,
+                PremiseTr = gen.PremiseTr,
+                Category = gen.Category ?? "general",
+                SubCategory = gen.SubCategory,
+                Series = gen.Series,
+                Tone = gen.Tone,
+                PotentialVisual = gen.PotentialVisual,
+                RenderStyle = gen.RenderStyle ?? profile.RenderStyle,
+                VoiceHint = gen.VoiceHint,
+                ScriptHint = gen.ScriptHint,
+                FactCheck = gen.FactCheck,
+                NeedsFootage = gen.NeedsFootage,
+                Priority = gen.Priority,
+
+                TopicJson = JsonSerializer.Serialize(gen),
+
+                ScriptGenerated = false,
+                ScriptGeneratedAt = null,
+
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            // DB'ye ekle
+            await _topicRepo.AddAsync(topic, ct);
+            await _uow.SaveChangesAsync(ct);
+
+            return topic;
+        }
     }
 }

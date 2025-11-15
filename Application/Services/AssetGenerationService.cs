@@ -3,404 +3,216 @@ using Application.AiLayer;
 using Application.Contracts.Script;
 using Core.Contracts;
 using Core.Entity;
+using Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace Application.Services
 {
     /// <summary>
-    /// ScriptContentDto içeriğine bağlı olarak sahne bazlı asset (image/audio/video) üretimi yapan servis.
-    /// ScriptGenerationProfile üzerinden ilgili AI bağlantılarını ve model adlarını belirler.
+    /// Pipeline içerisindeki Script’e göre image + audio asset üretimi yapan servis.
+    /// Tüm dosyalar AutoVideoPipeline dizinine yazılır, DB AssetFile olarak kaydedilir.
     /// </summary>
     public class AssetGenerationService
     {
+        private readonly IRepository<AutoVideoPipeline> _pipelineRepo;
+        private readonly IRepository<AutoVideoAssetFile> _assetRepo;
         private readonly IRepository<Script> _scriptRepo;
+        private readonly IRepository<AppUser> _appUserRepo;
         private readonly IUnitOfWork _uow;
-        private readonly INotifierService _notifier;
-        private readonly IUserDirectoryService _dirService;
+        private readonly IUserDirectoryService _dir;
         private readonly IAiGeneratorFactory _aiFactory;
-        private readonly IFFmpegService _ffmpeg;
-        private readonly IRepository<VideoAsset> _videoAssetRepo;
+        private readonly INotifierService _notifier;
 
         public AssetGenerationService(
+            IRepository<AutoVideoPipeline> pipelineRepo,
+            IRepository<AutoVideoAssetFile> assetRepo,
             IRepository<Script> scriptRepo,
             IUnitOfWork uow,
-            INotifierService notifier,
-            IUserDirectoryService dirService,
+            IUserDirectoryService dir,
             IAiGeneratorFactory aiFactory,
-            IFFmpegService ffmpeg,
-            IRepository<VideoAsset> videoAssetRepo  )
+            INotifierService notifier)
         {
+            _pipelineRepo = pipelineRepo;
+            _assetRepo = assetRepo;
             _scriptRepo = scriptRepo;
             _uow = uow;
-            _notifier = notifier;
-            _dirService = dirService;
+            _dir = dir;
             _aiFactory = aiFactory;
-            _ffmpeg = ffmpeg;
-            _videoAssetRepo = videoAssetRepo;
+            _notifier = notifier;
         }
 
         // --------------------------------------------------------------------
-        // 🎨 IMAGE GENERATION
+        // MAIN
         // --------------------------------------------------------------------
-        public async Task<string> GenerateImagesAsync(int scriptId, CancellationToken ct = default)
+        public async Task GenerateAssetsAsync(int pipelineId, CancellationToken ct)
         {
-            var script = await _scriptRepo.FirstOrDefaultAsync(
-                x => x.Id == scriptId,
-                include: q => q
-                    .Include(x => x.ScriptGenerationProfile)
-                        .ThenInclude(p => p.ImageAiConnection),
+            var pipeline = await _pipelineRepo.FirstOrDefaultAsync(
+                x => x.Id == pipelineId,
+                include: q => q.Include(p => p.Script)
+                               .Include(p => p.Profile)
+                                    .ThenInclude(p => p.ScriptGenerationProfile)
+                                        .ThenInclude(s => s.ImageAiConnection)
+                               .Include(p => p.Profile)
+                                    .ThenInclude(p => p.ScriptGenerationProfile)
+                                        .ThenInclude(s => s.TtsAiConnection),
                 asNoTracking: false,
-                ct: ct)
-                ?? throw new InvalidOperationException("Script bulunamadı.");
+                ct: ct
+            ) ?? throw new Exception("Pipeline bulunamadı.");
 
-            var profile = script.ScriptGenerationProfile
-                ?? throw new InvalidOperationException("ScriptGenerationProfile bulunamadı.");
+            if (pipeline.ScriptId == null)
+                throw new Exception("Pipeline için script atanmadı.");
 
-            var userId = script.UserId;
+            var script = pipeline.Script!;
+            var userId = pipeline.AppUserId;
+
             var dto = JsonSerializer.Deserialize<ScriptContentDto>(script.Content)
                 ?? throw new InvalidOperationException("Geçersiz Script JSON formatı.");
 
-            // 📁 Kullanıcı dizinleri
-            var baseDir = _dirService.GetScriptDirectory(userId, script.Id);
-            var imgDir = Path.Combine(baseDir, "images");
-            Directory.CreateDirectory(imgDir);
+            // ----------------------------------------
+            // Dizini oluştur
+            // ----------------------------------------
+            var appUser = await _appUserRepo.FirstOrDefaultAsync(x => x.Id == userId, ct: ct)
+                ?? throw new Exception("Kullanıcı bulunamadı.");
 
-            // 🔹 AI sağlayıcısı profile’dan belirlenir
-            var imageConnId = profile.ImageAiConnectionId ?? profile.AiConnectionId;
-            var aiClient = await _aiFactory.ResolveImageClientAsync(userId, imageConnId, ct);
+            var assetRoot = _dir.GetVideoPipelineRoot(appUser, pipeline.Id);
+            Directory.CreateDirectory(assetRoot);
 
-            // 🔸 Model fallback zinciri
-            string modelName = profile.ImageModelName;
-            if (string.IsNullOrWhiteSpace(modelName) && profile.ImageAiConnection != null)
-                modelName = profile.ImageAiConnection.ImageModel; // Doğru alan ismi
-            modelName ??= "imagen-3.0-generate-001"; // Default model
+            var imageDir = Path.Combine(assetRoot, "images");
+            var audioDir = Path.Combine(assetRoot, "audio");
 
-            int totalScenes = dto.Scenes?.Count ?? 0;
-            int processed = 0;
-
-            foreach (var scene in dto.Scenes)
-            {
-                processed++;
-                var progress = (int)((double)processed / totalScenes * 100);
-
-                await _notifier.JobProgressAsync(userId, script.Id,
-                    $"🎨 Görsel üretiliyor (Sahne {scene.Index})", progress);
-
-                try
-                {
-                    var prompt = scene.ImagePrompt;
-                    if (string.IsNullOrWhiteSpace(prompt))
-                        throw new InvalidOperationException($"Sahne {scene.Index} için imagePrompt eksik.");
-
-                    var filename = $"scene_{scene.Index:D3}.jpg";
-                    var outputPath = Path.Combine(imgDir, filename);
-
-                    // 🧠 Görsel verisini al
-                    var bytes = await aiClient.GenerateImageAsync(prompt, "1080x1920", profile.ImageRenderStyle, modelName, ct);
-
-                    // 💾 Dosyaya yaz
-                    await File.WriteAllBytesAsync(outputPath, bytes, ct);
-
-                    scene.ImageGeneratedPath = outputPath.Replace("\\", "/");
-                }
-                catch (Exception ex)
-                {
-                    await _notifier.NotifyUserAsync(userId, "AssetError", new
-                    {
-                        scene = scene.Index,
-                        error = ex.Message
-                    });
-                }
-
-                await Task.Delay(1500, ct); // Rate limit koruması
-            }
-
-            // Güncel JSON’u Script’e yaz
-            script.Content = JsonSerializer.Serialize(dto, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-
-            _scriptRepo.Update(script);
-            await _uow.SaveChangesAsync(ct);
-
-            await _notifier.JobCompletedAsync(userId, script.Id, true,
-                $"✅ Görsel üretimi tamamlandı ({processed}/{totalScenes}).");
-
-            return $"Görsel üretimi tamamlandı ({processed}/{totalScenes}).";
-        }
-
-
-        // --------------------------------------------------------------------
-        // 🎙️ AUDIO (TTS) GENERATION
-        // --------------------------------------------------------------------
-        public async Task<string> GenerateAudiosAsync(int scriptId, CancellationToken ct = default)
-        {
-            var script = await _scriptRepo.FirstOrDefaultAsync(
-                x => x.Id == scriptId,
-                include: q => q
-                    .Include(x => x.ScriptGenerationProfile)
-                        .ThenInclude(p => p.TtsAiConnection),
-                asNoTracking: false,
-                ct: ct)
-                ?? throw new InvalidOperationException("Script bulunamadı.");
-
-            var profile = script.ScriptGenerationProfile
-                ?? throw new InvalidOperationException("ScriptGenerationProfile bulunamadı.");
-
-            var userId = script.UserId;
-            var dto = JsonSerializer.Deserialize<ScriptContentDto>(script.Content)
-                ?? throw new InvalidOperationException("Geçersiz Script JSON formatı.");
-
-            // 📁 Kullanıcı dizinleri
-            var baseDir = _dirService.GetScriptDirectory(userId, script.Id);
-            var audioDir = Path.Combine(baseDir, "audio");
+            Directory.CreateDirectory(imageDir);
             Directory.CreateDirectory(audioDir);
 
-            // 🔹 AI sağlayıcısı profile’dan belirlenir
-            var ttsConnId = profile.TtsAiConnectionId ?? profile.AiConnectionId;
-            var aiClient = await _aiFactory.ResolveTtsClientAsync(userId, ttsConnId, ct);
+            await Log(pipeline, "Asset üretimi başlatıldı.");
 
-            // 🔸 Model fallback zinciri
-            string modelName = profile.TtsModelName;
-            if (string.IsNullOrWhiteSpace(modelName) && profile.TtsAiConnection != null)
-                modelName = profile.TtsAiConnection.VideoModel;
-            modelName ??= "gpt-4o-mini-tts"; // Default model
+            // ----------------------------------------
+            // AI Clientlar
+            // ----------------------------------------
+            var sgp = pipeline.Profile!.ScriptGenerationProfile!;
+            var imageConnId = sgp.ImageAiConnectionId ?? sgp.AiConnectionId;
+            var ttsConnId = sgp.TtsAiConnectionId ?? sgp.AiConnectionId;
 
-            // 🔸 Voice fallback
-            string voiceName = profile.TtsVoice
+            var imageClient = await _aiFactory.ResolveImageClientAsync(userId, imageConnId, ct);
+            var ttsClient = await _aiFactory.ResolveTtsClientAsync(userId, ttsConnId, ct);
+
+            var imageModel = sgp.ImageModelName
+                ?? sgp.ImageAiConnection?.ImageModel
+                ?? "imagen-3.0-generate-001";
+
+            var ttsModel = sgp.TtsModelName
+                ?? sgp.TtsAiConnection?.VideoModel
+                ?? "gpt-4o-mini-tts";
+
+            var voiceName = sgp.TtsVoice
                 ?? dto.Voice?.Name
                 ?? "alloy";
 
-            int totalScenes = dto.Scenes?.Count ?? 0;
-            int processed = 0;
+            int total = dto.Scenes?.Count ?? 0;
+            int index = 0;
 
             foreach (var scene in dto.Scenes)
             {
-                processed++;
-                var progress = (int)((double)processed / totalScenes * 100);
+                index++;
+                var progress = (int)((double)index / total * 100);
 
-                await _notifier.JobProgressAsync(userId, script.Id,
-                    $"🎤 Ses üretiliyor (Sahne {scene.Index})", progress);
+                // ----------------------------------------
+                // Görsel Üret
+                // ----------------------------------------
+                await _notifier.JobProgressAsync(userId, pipelineId, $"🎨 Görsel üretiliyor (Sahne {scene.Index})", progress);
 
-                try
+                if (!string.IsNullOrWhiteSpace(scene.ImagePrompt))
                 {
-                    var narration = scene.Narration;
-                    if (string.IsNullOrWhiteSpace(narration))
-                        throw new InvalidOperationException($"Sahne {scene.Index} için narration eksik.");
+                    var filename = $"scene_{scene.Index:D3}.jpg";
+                    var outPath = Path.Combine(imageDir, filename);
 
+                    var bytes = await imageClient.GenerateImageAsync(
+                        scene.ImagePrompt,
+                        sgp.ImageAspectRatio ?? "1080x1920",
+                        sgp.ImageRenderStyle,
+                        imageModel,
+                        ct
+                    );
+
+                    await File.WriteAllBytesAsync(outPath, bytes, ct);
+                    scene.ImageGeneratedPath = outPath.Replace("\\", "/");
+
+                    await SaveAsset(pipeline, AutoVideoAssetFileType.Image, scene.Index, scene.ImageGeneratedPath, $"scene_{scene.Index:D3}");
+                }
+
+                // ----------------------------------------
+                // Ses Üret (Narration)
+                // ----------------------------------------
+                await _notifier.JobProgressAsync(userId, pipelineId, $"🎤 Ses üretiliyor (Sahne {scene.Index})", progress);
+
+                if (!string.IsNullOrWhiteSpace(scene.Narration))
+                {
                     var filename = $"scene_{scene.Index:D3}.mp3";
-                    var outputPath = Path.Combine(audioDir, filename);
+                    var outPath = Path.Combine(audioDir, filename);
 
-                    // 🎧 AI'dan ses üretimi (ham veriyi al)
-                    var audioBytes = await aiClient.GenerateAudioAsync(narration, voiceName, modelName, "mp3", ct);
+                    var audio = await ttsClient.GenerateAudioAsync(
+                        scene.Narration,
+                        voiceName,
+                        ttsModel,
+                        "mp3",
+                        ct
+                    );
 
-                    // 💾 Dosyaya yaz
-                    await File.WriteAllBytesAsync(outputPath, audioBytes, ct);
+                    await File.WriteAllBytesAsync(outPath, audio, ct);
+                    scene.AudioGeneratedPath = outPath.Replace("\\", "/");
 
-                    scene.AudioGeneratedPath = outputPath.Replace("\\", "/");
-                }
-                catch (Exception ex)
-                {
-                    await _notifier.NotifyUserAsync(userId, "AssetError", new
-                    {
-                        scene = scene.Index,
-                        error = ex.Message
-                    });
+                    await SaveAsset(pipeline, AutoVideoAssetFileType.Audio, scene.Index, scene.AudioGeneratedPath, $"scene_{scene.Index:D3}");
                 }
 
-                await Task.Delay(1000, ct); // Rate limit koruması
+                await Task.Delay(1500, ct);
             }
 
-            // Güncel JSON’u Script’e yaz
-            script.Content = JsonSerializer.Serialize(dto, new JsonSerializerOptions
+            // JSON geri yaz
+            script.Content = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
+            _scriptRepo.Update(script);
+
+            await _uow.SaveChangesAsync(ct);
+
+            await Log(pipeline, "Asset üretimi tamamlandı.");
+            await _notifier.JobCompletedAsync(userId, pipelineId, true, "Asset üretimi tamamlandı.");
+        }
+
+        // --------------------------------------------------------------------
+        // HELPERS
+        // --------------------------------------------------------------------
+
+        private async Task SaveAsset(
+          AutoVideoPipeline pipeline,
+          AutoVideoAssetFileType type,
+          int scene,
+          string path,
+          string assetKey)
+        {
+            await _assetRepo.AddAsync(new AutoVideoAssetFile
             {
-                WriteIndented = true
+                AppUserId = pipeline.AppUserId,
+                AutoVideoPipelineId = pipeline.Id,
+                SceneNumber = scene,
+                FileType = type,
+                FilePath = path,
+                AssetKey = assetKey,
+                IsGenerated = true,
             });
 
-            _scriptRepo.Update(script);
-            await _uow.SaveChangesAsync(ct);
-
-            await _notifier.JobCompletedAsync(userId, script.Id, true,
-                $"✅ Ses üretimi tamamlandı ({processed}/{totalScenes}).");
-
-            return $"Ses üretimi tamamlandı ({processed}/{totalScenes}).";
+            await _uow.SaveChangesAsync();
         }
 
-
-        public async Task<string> GenerateVideosAsync(int scriptId, CancellationToken ct = default)
+        private async Task Log(AutoVideoPipeline p, string msg)
         {
-            var script = await _scriptRepo.FirstOrDefaultAsync(
-                x => x.Id == scriptId,
-                asNoTracking: false,
-                ct: ct)
-                ?? throw new InvalidOperationException("Script bulunamadı.");
+            var logs = string.IsNullOrEmpty(p.LogJson)
+                ? new List<string>()
+                : JsonSerializer.Deserialize<List<string>>(p.LogJson);
 
-            var userId = script.UserId;
-            var dto = JsonSerializer.Deserialize<ScriptContentDto>(script.Content)
-                ?? throw new InvalidOperationException("Geçersiz Script JSON formatı.");
+            logs!.Add($"[{DateTime.Now:HH:mm:ss}] {msg}");
+            p.LogJson = JsonSerializer.Serialize(logs);
 
-            var baseDir = _dirService.GetScriptDirectory(userId, script.Id);
-            var renderDir = Path.Combine(baseDir, "renders");
-            Directory.CreateDirectory(renderDir);
-
-            var tempVideos = new List<string>();
-            int totalScenes = dto.Scenes?.Count ?? 0;
-            int processed = 0;
-
-            foreach (var scene in dto.Scenes)
-            {
-                processed++;
-                var progress = (int)((double)processed / totalScenes * 100);
-
-                await _notifier.JobProgressAsync(userId, script.Id,
-                    $"🎬 Video render ediliyor (Sahne {scene.Index})", progress);
-
-                try
-                {
-                    if (string.IsNullOrWhiteSpace(scene.ImageGeneratedPath) ||
-                        string.IsNullOrWhiteSpace(scene.AudioGeneratedPath))
-                        throw new InvalidOperationException($"Sahne {scene.Index} için eksik medya (görsel veya ses).");
-
-                    var outputPath = Path.Combine(renderDir, $"scene_{scene.Index:D3}.mp4");
-                    await _ffmpeg.GenerateSceneVideoAsync(scene.ImageGeneratedPath, scene.AudioGeneratedPath, outputPath, ct);
-                    scene.VideoGeneratedPath = outputPath.Replace("\\", "/");
-                    tempVideos.Add(outputPath);
-                }
-                catch (Exception ex)
-                {
-                    await _notifier.NotifyUserAsync(userId, "RenderError", new
-                    {
-                        scene = scene.Index,
-                        error = ex.Message
-                    });
-                }
-
-                await Task.Delay(500, ct);
-            }
-
-            // Final birleştirme
-            var finalPath = Path.Combine(renderDir, $"final_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
-            await _ffmpeg.ConcatVideosAsync(tempVideos, finalPath, ct);
-
-            // Script güncelle
-            script.Content = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
-            _scriptRepo.Update(script);
-            await _uow.SaveChangesAsync(ct);
-
-            await _notifier.JobCompletedAsync(userId, script.Id, true,
-                $"✅ Video render tamamlandı ({processed}/{totalScenes}).");
-
-            return $"Video render tamamlandı ({processed}/{totalScenes}).";
+            _pipelineRepo.Update(p);
+            await _uow.SaveChangesAsync();
         }
-
-        public async Task<string> GenerateAllAsync(int scriptId, CancellationToken ct = default)
-        {
-            var script = await _scriptRepo.FirstOrDefaultAsync(
-                x => x.Id == scriptId,
-                include: q => q
-                    .Include(x => x.ScriptGenerationProfile)
-                        .ThenInclude(p => p.ImageAiConnection)
-                    .Include(x => x.ScriptGenerationProfile)
-                        .ThenInclude(p => p.TtsAiConnection),
-                asNoTracking: false,
-                ct: ct)
-                ?? throw new InvalidOperationException("Script bulunamadı.");
-
-            var userId = script.UserId;
-            var dto = JsonSerializer.Deserialize<ScriptContentDto>(script.Content)
-                ?? throw new InvalidOperationException("Geçersiz Script JSON formatı.");
-
-            await _notifier.JobProgressAsync(userId, script.Id, "🎨 Asset üretimi başlatılıyor...", 0);
-
-            // 1️⃣ Görselleri üret
-            await GenerateImagesAsync(scriptId, ct);
-
-            // 2️⃣ Sesleri üret
-            await GenerateAudiosAsync(scriptId, ct);
-
-            await _notifier.JobProgressAsync(userId, script.Id, "🎬 Video render başlatılıyor...", 70);
-
-            // 3️⃣ Videoyu oluştur
-            var baseDir = _dirService.GetScriptDirectory(userId, script.Id);
-            var renderDir = Path.Combine(baseDir, "renders");
-            Directory.CreateDirectory(renderDir);
-
-            var sceneVideos = new List<string>();
-
-            foreach (var scene in dto.Scenes)
-            {
-                if (string.IsNullOrWhiteSpace(scene.ImageGeneratedPath) || string.IsNullOrWhiteSpace(scene.AudioGeneratedPath))
-                    continue;
-
-                var sceneVideo = Path.Combine(renderDir, $"scene_{scene.Index:D3}.mp4");
-
-                await _ffmpeg.GenerateSceneVideoAsync(scene.ImageGeneratedPath, scene.AudioGeneratedPath, sceneVideo, ct);
-
-                scene.VideoGeneratedPath = sceneVideo.Replace("\\", "/");
-
-                // 🎥 VideoAsset oluştur
-                await _videoAssetRepo.AddAsync(new VideoAsset
-                {
-                    UserId = userId,
-                    ScriptId = script.Id,
-                    AssetType = "video",
-                    AssetKey = $"scene_{scene.Index:D3}_video",
-                    FilePath = scene.VideoGeneratedPath,
-                    IsGenerated = true,
-                    GeneratedAt = DateTime.UtcNow
-                }, ct);
-
-                sceneVideos.Add(sceneVideo);
-                await Task.Delay(300, ct);
-            }
-
-            // 4️⃣ Final video oluştur
-            var finalPath = Path.Combine(renderDir, $"final_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
-            await _ffmpeg.ConcatVideosAsync(sceneVideos, finalPath, ct);
-
-            // 🎞️ Final video metadata
-            var duration = await _ffmpeg.GetVideoDurationAsync(finalPath, ct);
-            var thumbPath = await _ffmpeg.GenerateThumbnailAsync(finalPath, renderDir, ct);
-
-            // 🎬 Final VideoAsset
-            await _videoAssetRepo.AddAsync(new VideoAsset
-            {
-                UserId = userId,
-                ScriptId = script.Id,
-                AssetType = "final",
-                AssetKey = "final_render",
-                FilePath = finalPath.Replace("\\", "/"),
-                IsGenerated = true,
-                GeneratedAt = DateTime.UtcNow,
-                MetadataJson = JsonSerializer.Serialize(new
-                {
-                    Duration = duration,
-                    Thumbnail = thumbPath
-                })
-            }, ct);
-
-            // Render bilgilerini dto’ya ekle
-            dto.Render = new ScriptRenderInfo
-            {
-                FilePath = finalPath.Replace("\\", "/"),
-                CreatedAt = DateTime.UtcNow,
-                DurationSeconds = duration,
-                Format = "mp4",
-                Resolution = "1080x1920",
-                ThumbnailPath = thumbPath.Replace("\\", "/")
-            };
-
-            // JSON güncelle
-            script.Content = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
-            _scriptRepo.Update(script);
-            await _uow.SaveChangesAsync(ct);
-
-            await _notifier.JobCompletedAsync(userId, script.Id, true, "✅ Tüm üretim adımları tamamlandı (Assets + Video).");
-
-            return "Tüm üretim adımları tamamlandı.";
-        }
-
     }
 }

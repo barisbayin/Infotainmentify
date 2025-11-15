@@ -66,8 +66,10 @@ namespace WebAPI
             builder.Services.AddScoped<BackgroundJobRunner>();
             builder.Services.AddScoped<VideoAssetService>();
             builder.Services.AddScoped<AssetGenerationService>();
-            builder.Services.AddScoped<AutoVideoAssetProfileService>();
+            builder.Services.AddScoped<VideoAssetService>();
             builder.Services.AddScoped<AutoVideoAssetService>();
+            builder.Services.AddScoped<AutoVideoPipelineService>();
+            builder.Services.AddScoped<UploadVideoService>();
             //builder.Services.AddScoped<TopicGenerationService>();
 
             builder.Services.AddHttpContextAccessor();

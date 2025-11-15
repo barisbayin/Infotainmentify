@@ -6,6 +6,7 @@
         ScriptGeneration = 2,
         YouTubeUpload = 3,
         ThumbnailRender = 4,
+        AutoVideoGeneration = 5,
         Other = 99
     }
 }

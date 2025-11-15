@@ -87,7 +87,7 @@ namespace Application.Services
                     AppUserId = userId,
                     PromptId = dto.PromptId,
                     AiConnectionId = dto.AiConnectionId,
-                    TopicGenerationProfileId = dto.TopicGenerationProfileId,
+                    TopicGenerationProfileId = dto.TopicGenerationProfileId ?? 0,
                     ProfileName = profileName,
                     ModelName = modelName,
                     Temperature = dto.Temperature,
@@ -137,7 +137,7 @@ namespace Application.Services
 
             entity.PromptId = dto.PromptId;
             entity.AiConnectionId = dto.AiConnectionId;
-            entity.TopicGenerationProfileId = dto.TopicGenerationProfileId;
+            entity.TopicGenerationProfileId = dto.TopicGenerationProfileId ?? 0;
             entity.ProfileName = profileName;
             entity.ModelName = modelName;
             entity.Temperature = dto.Temperature;

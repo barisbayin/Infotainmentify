@@ -18,7 +18,7 @@ namespace Core.Entity
         [ForeignKey(nameof(AppUserId))]
         public AppUser User { get; set; } = null!;
 
-        public int? TopicGenerationProfileId { get; set; }
+        public int TopicGenerationProfileId { get; set; }
 
         [ForeignKey(nameof(TopicGenerationProfileId))]
         public TopicGenerationProfile? TopicGenerationProfile { get; set; }

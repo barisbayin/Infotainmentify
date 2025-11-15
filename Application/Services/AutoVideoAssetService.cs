@@ -33,7 +33,7 @@ namespace Application.Services
                 AppUserId = _current.UserId,
                 ProfileId = profileId,
                 Status = AutoVideoAssetStatus.Pending,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now
             };
 
             await _repo.AddAsync(entity, ct);
@@ -188,7 +188,7 @@ namespace Application.Services
 
             var logEntry = new
             {
-                at = DateTime.UtcNow,
+                at = DateTime.Now,
                 msg = message,
                 data
             };

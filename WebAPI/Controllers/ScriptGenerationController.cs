@@ -131,7 +131,7 @@ namespace WebAPI.Controllers
             {
                 success = true,
                 message = "Script üretimi arka planda başlatıldı. İlerleme SignalR üzerinden izlenecek.",
-                startedAt = DateTime.UtcNow
+                startedAt = DateTime.Now
             });
         }
 

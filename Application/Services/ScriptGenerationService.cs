@@ -320,7 +320,7 @@ namespace Application.Services
                     await _scriptRepo.AddAsync(script, ct);
 
                     topic.ScriptGenerated = true;
-                    topic.ScriptGeneratedAt = DateTimeOffset.UtcNow;
+                    topic.ScriptGeneratedAt = DateTimeOffset.Now;
                     generatedIds.Add(topic.Id);
                 }
                 catch (Exception ex)
@@ -352,6 +352,114 @@ namespace Application.Services
                 ProductionType = productionType,
                 RenderStyle = renderStyle
             };
+        }
+
+        public async Task<Script> GenerateSingleAsync(
+    int scriptProfileId,
+    Topic topic,
+    CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var userId = _current.UserId;
+
+            // 1) ScriptGenerationProfile çek
+            var profile = await _profileRepo.GetByIdAsync(scriptProfileId, asNoTracking: true, ct)
+                ?? throw new InvalidOperationException("ScriptGenerationProfile bulunamadı.");
+
+            if (!profile.IsActive)
+                throw new InvalidOperationException("Bu script profili pasif.");
+
+            // 2) AI connection
+            var aiConn = await _aiRepo.GetByIdAsync(profile.AiConnectionId, asNoTracking: true, ct)
+                ?? throw new InvalidOperationException("AI bağlantısı bulunamadı.");
+
+            if (!aiConn.IsActive)
+                throw new InvalidOperationException("AI bağlantısı pasif.");
+
+            // 3) Prompt
+            var prompt = await _promptRepo.GetByIdAsync(profile.PromptId, asNoTracking: true, ct)
+                ?? throw new InvalidOperationException("Script için prompt bulunamadı.");
+
+            if (!prompt.IsActive)
+                throw new InvalidOperationException("Prompt pasif durumda.");
+
+            // 4) Credentials çöz
+            var credsJson = _secret.Unprotect(aiConn.EncryptedCredentialJson);
+            var creds = JsonSerializer.Deserialize<Dictionary<string, string>>(credsJson)
+                ?? throw new InvalidOperationException("Geçersiz credential formatı.");
+
+            var generator = _factory.Resolve(aiConn.Provider, creds);
+
+            // 5) Prompt değişkenlerini doldur
+            var language = profile.Language ?? "en";
+            var productionType = profile.ProductionType ?? "video";
+            var renderStyle = profile.RenderStyle ?? "cinematic_vertical";
+
+            var systemPrompt = (prompt.SystemPrompt ?? string.Empty)
+                .Replace("{{LANGUAGE}}", language)
+                .Replace("{{PRODUCTION_TYPE}}", productionType)
+                .Replace("{{RENDER_STYLE}}", renderStyle);
+
+            var userPrompt = (prompt.Body ?? string.Empty)
+                .Replace("{{PREMISE}}", topic.Premise ?? "")
+                .Replace("{{CATEGORY}}", topic.Category ?? "")
+                .Replace("{{TONE}}", topic.Tone ?? "")
+                .Replace("{{LANGUAGE}}", language)
+                .Replace("{{POTENTIAL_VISUAL}}", topic.PotentialVisual ?? "")
+                .Replace("{{RENDER_STYLE}}", renderStyle)
+                .Replace("{{PRODUCTION_TYPE}}", productionType);
+
+            // 6) Script AI request
+            var req = new ScriptGenerationRequest
+            {
+                SystemPrompt = systemPrompt,
+                UserPrompt = userPrompt,
+                Model = profile.ModelName ?? aiConn.TextModel,
+                Temperature = profile.Temperature > 0 ? profile.Temperature : 0.8,
+                Language = language,
+                ProductionType = productionType,
+                RenderStyle = renderStyle,
+                Premise = topic.Premise,
+                PotentialVisual = topic.PotentialVisual,
+                Category = topic.Category,
+                ProfileId = profile.Id,
+                UserId = userId,
+                ExtraParameters = creds
+            };
+
+            // 7) AI çağrısı
+            var scriptResult = await generator.GenerateScriptsAsync(req, ct);
+
+            if (string.IsNullOrWhiteSpace(scriptResult))
+                throw new InvalidOperationException("AI script üretemedi.");
+
+            // 8) Script DB entity oluştur
+            var script = new Script
+            {
+                UserId = userId,
+                TopicId = topic.Id,
+                Title = $"Script for {topic.TopicCode}",
+                Content = scriptResult,
+                ScriptJson = scriptResult,
+                Language = language,
+                ScriptGenerationProfileId = profile.Id,
+                MetaJson = JsonSerializer.Serialize(new
+                {
+                    aiConn.Provider,
+                    model = req.Model,
+                    req.Temperature,
+                    productionType,
+                    renderStyle
+                }),
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+
+            await _scriptRepo.AddAsync(script, ct);
+            await _uow.SaveChangesAsync(ct);
+
+            return script;
         }
     }
 }

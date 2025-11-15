@@ -1,9 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Core.Abstractions;
+using Core.Enums;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
-    public class AutoVideoAssetProfile : BaseEntity
+    public class VideoGenerationProfile : BaseEntity, IJobProfile
     {
         public int AppUserId { get; set; }
 
@@ -13,21 +15,13 @@ namespace Core.Entity
         [Required, MaxLength(100)]
         public string ProfileName { get; set; } = null!;
 
-        // 1) Topic üretim profili
-        [Required]
-        public int TopicGenerationProfileId { get; set; }
-
-        [ForeignKey(nameof(TopicGenerationProfileId))]
-        public TopicGenerationProfile TopicGenerationProfile { get; set; } = null!;
-
-        // 2) Script + Asset üretim profili
-        [Required]
+        // Script üretim profili
         public int ScriptGenerationProfileId { get; set; }
 
         [ForeignKey(nameof(ScriptGenerationProfileId))]
         public ScriptGenerationProfile ScriptGenerationProfile { get; set; } = null!;
 
-        // 3) Upload behavior
+        // Upload behavior
         public int? SocialChannelId { get; set; }
 
         [ForeignKey(nameof(SocialChannelId))]
@@ -41,6 +35,18 @@ namespace Core.Entity
 
         [MaxLength(2000)]
         public string? DescriptionTemplate { get; set; }
+
+        public JobType JobType => throw new NotImplementedException();
+
+        public IDictionary<string, object> ToParameters()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Validate()
+        {
+            throw new NotImplementedException();
+        }
     }
 
 }

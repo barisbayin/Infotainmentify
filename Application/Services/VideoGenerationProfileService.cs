@@ -1,26 +1,33 @@
-﻿using Application.Contracts.AutoVideoAsset;
-using Application.Mappers;
-using Core.Contracts;
+﻿using Core.Contracts;
 using Core.Entity;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Application.Contracts.AutoVideoAsset;
+using Application.Mappers;
 
 namespace Application.Services
 {
-    public class AutoVideoAssetProfileService
+    public class VideoGenerationProfileService
     {
-        private readonly IRepository<AutoVideoAssetProfile> _repo;
+        private readonly IRepository<VideoGenerationProfile> _repo;
         private readonly IUnitOfWork _uow;
 
-        public AutoVideoAssetProfileService(
-            IRepository<AutoVideoAssetProfile> repo,
+        public VideoGenerationProfileService(
+            IRepository<VideoGenerationProfile> repo,
             IUnitOfWork uow)
         {
             _repo = repo;
             _uow = uow;
         }
 
-        // ---------------- LIST ----------------
-        public async Task<IReadOnlyList<AutoVideoAssetProfileListDto>> ListAsync(
+        // ------------------------------------------------------------
+        // LIST (Current User)
+        // ------------------------------------------------------------
+        public async Task<IReadOnlyList<VideoGenerationProfileListDto>> ListAsync(
             int userId,
             CancellationToken ct)
         {
@@ -28,16 +35,18 @@ namespace Application.Services
                 p => p.AppUserId == userId,
                 asNoTracking: true,
                 ct: ct,
-                x => x.TopicGenerationProfile,
-                x => x.ScriptGenerationProfile,
-                x => x.SocialChannel
+                include: q => q
+                    .Include(x => x.ScriptGenerationProfile)
+                    .Include(x => x.SocialChannel)
             );
 
             return list.Select(x => x.ToListDto()).ToList();
         }
 
-        // ---------------- GET ----------------
-        public async Task<AutoVideoAssetProfileDetailDto?> GetAsync(
+        // ------------------------------------------------------------
+        // GET (Detail)
+        // ------------------------------------------------------------
+        public async Task<VideoGenerationProfileDetailDto?> GetAsync(
             int userId,
             int id,
             CancellationToken ct)
@@ -45,24 +54,26 @@ namespace Application.Services
             var entity = await _repo.FirstOrDefaultAsync(
                 p => p.AppUserId == userId && p.Id == id,
                 include: q => q
-                    .Include(x => x.TopicGenerationProfile)
                     .Include(x => x.ScriptGenerationProfile)
                     .Include(x => x.SocialChannel),
                 asNoTracking: true,
-                ct: ct);
+                ct: ct
+            );
 
             return entity?.ToDetailDto();
         }
 
-        // ---------------- UPSERT ----------------
+        // ------------------------------------------------------------
+        // UPSERT
+        // ------------------------------------------------------------
         public async Task<int> UpsertAsync(
             int userId,
-            AutoVideoAssetProfileDetailDto dto,
+            VideoGenerationProfileDetailDto dto,
             CancellationToken ct)
         {
             var profileName = dto.ProfileName.Trim();
 
-            // --- CREATE ---
+            // ---------- CREATE ----------
             if (dto.Id == 0)
             {
                 var exists = await _repo.AnyAsync(
@@ -70,13 +81,12 @@ namespace Application.Services
                     ct);
 
                 if (exists)
-                    throw new InvalidOperationException("Bu profil adı zaten var.");
+                    throw new InvalidOperationException("Bu profil adı zaten kullanılıyor.");
 
-                var e = new AutoVideoAssetProfile
+                var e = new VideoGenerationProfile
                 {
                     AppUserId = userId,
                     ProfileName = profileName,
-                    TopicGenerationProfileId = dto.TopicGenerationProfileId,
                     ScriptGenerationProfileId = dto.ScriptGenerationProfileId,
                     SocialChannelId = dto.SocialChannelId,
                     UploadAfterRender = dto.UploadAfterRender,
@@ -91,17 +101,17 @@ namespace Application.Services
                 return e.Id;
             }
 
-            // --- UPDATE ---
+            // ---------- UPDATE ----------
             var entity = await _repo.FirstOrDefaultAsync(
                 p => p.AppUserId == userId && p.Id == dto.Id,
                 asNoTracking: false,
-                ct: ct);
+                ct: ct
+            );
 
             if (entity == null)
-                throw new KeyNotFoundException("AutoVideoAssetProfile bulunamadı.");
+                throw new KeyNotFoundException("VideoGenerationProfile bulunamadı.");
 
             entity.ProfileName = profileName;
-            entity.TopicGenerationProfileId = dto.TopicGenerationProfileId;
             entity.ScriptGenerationProfileId = dto.ScriptGenerationProfileId;
             entity.SocialChannelId = dto.SocialChannelId;
             entity.UploadAfterRender = dto.UploadAfterRender;
@@ -116,7 +126,9 @@ namespace Application.Services
             return entity.Id;
         }
 
-        // ---------------- DELETE ----------------
+        // ------------------------------------------------------------
+        // DELETE
+        // ------------------------------------------------------------
         public async Task<bool> DeleteAsync(int userId, int id, CancellationToken ct)
         {
             var e = await _repo.FirstOrDefaultAsync(
@@ -124,7 +136,7 @@ namespace Application.Services
                 asNoTracking: false,
                 ct: ct);
 
-            if (e is null)
+            if (e == null)
                 return false;
 
             _repo.Delete(e);
