@@ -1,5 +1,7 @@
 ﻿using Application.Abstractions;
+using Application.Contracts.Script;
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Services;
 using Google.Apis.Upload;
 using Google.Apis.YouTube.v3;
@@ -9,11 +11,27 @@ namespace Application.SocialPlatform
 {
     public class YouTubeUploader : ISocialUploader
     {
+        private static readonly Dictionary<string, string> CategoryMap = new()
+        {
+            { "Film & Animation", "1" },
+            { "Autos & Vehicles", "2" },
+            { "Music", "10" },
+            { "Pets & Animals", "15" },
+            { "Sports", "17" },
+            { "Shorts", "22" },
+            { "People & Blogs", "22" }, // default
+            { "Comedy", "23" },
+            { "Entertainment", "24" },
+            { "News & Politics", "25" },
+            { "Howto & Style", "26" },
+            { "Education", "27" },
+            { "Science & Technology", "28" },
+        };
+
         public async Task<string> UploadAsync(
             int userId,
             string videoPath,
-            string? title,
-            string? description,
+            ScriptContentDto script,
             IReadOnlyDictionary<string, string> credentials,
             CancellationToken ct = default)
         {
@@ -35,10 +53,10 @@ namespace Application.SocialPlatform
                 RefreshToken = refreshToken
             };
 
-            var flow = new Google.Apis.Auth.OAuth2.Flows.GoogleAuthorizationCodeFlow(
-                new Google.Apis.Auth.OAuth2.Flows.GoogleAuthorizationCodeFlow.Initializer
+            var flow = new GoogleAuthorizationCodeFlow(
+                new GoogleAuthorizationCodeFlow.Initializer
                 {
-                    ClientSecrets = new Google.Apis.Auth.OAuth2.ClientSecrets
+                    ClientSecrets = new ClientSecrets
                     {
                         ClientId = clientId,
                         ClientSecret = clientSecret
@@ -59,28 +77,54 @@ namespace Application.SocialPlatform
             });
 
             // -------------------------------------------------------------
-            // 3) Video metadata hazırlanır
+            // 3) ScriptContentDto -> YouTube Metadata Mapping
+            // -------------------------------------------------------------
+            var meta = script;
+
+            string title =
+                !string.IsNullOrWhiteSpace(meta.Title)
+                    ? meta.Title
+                    : "AI Generated Video";
+
+            string description =
+                meta.Platform!.Description ?? "";
+
+            string[] tags =
+                meta.Tags?.Any() == true
+                    ? meta.Tags.ToArray()
+                    : new[] { "shorts", "ai", "infotainment" };
+
+            string categoryId =
+                (meta.Category != null &&
+                 CategoryMap.TryGetValue(meta.Category, out var cid))
+                    ? cid
+                    : "22";
+
+            string visibility = "public";
+
+            bool madeForKids = false;
+
+            // -------------------------------------------------------------
+            // 4) Video objesi
             // -------------------------------------------------------------
             var video = new Google.Apis.YouTube.v3.Data.Video
             {
                 Snippet = new VideoSnippet
                 {
-                    Title = title ?? "AI Generated Video",
-                    Description = description ?? "",
-                    CategoryId = "22", // People & Blogs (Shorts için en yaygın)
-                    Tags = new[]
-                    {
-                    "shorts", "ai", "infotainment", "viral", "trending", "fun fact"
-                }
+                    Title = title,
+                    Description = description,
+                    Tags = tags,
+                    CategoryId = categoryId
                 },
-                Status = new VideoStatus
+                Status = new Google.Apis.YouTube.v3.Data.VideoStatus
                 {
-                    PrivacyStatus = "public" // public/unlisted/private
+                    PrivacyStatus = visibility,
+                    MadeForKids = madeForKids
                 }
             };
 
             // -------------------------------------------------------------
-            // 4) Upload request hazırlığı
+            // 5) Upload request
             // -------------------------------------------------------------
             using var fileStream = new FileStream(videoPath, FileMode.Open);
 
@@ -95,34 +139,21 @@ namespace Application.SocialPlatform
 
             string uploadedVideoId = string.Empty;
 
-            // -------------------------------------------------------------
-            // 5) Upload progres hook
-            // -------------------------------------------------------------
+            // Progress hook
             request.ProgressChanged += progress =>
             {
-                switch (progress.Status)
+                if (progress.Status == UploadStatus.Failed)
                 {
-                    case UploadStatus.Uploading:
-                        // istersen SignalR notify buraya ekleyebilirim
-                        break;
-
-                    case UploadStatus.Failed:
-                        throw new InvalidOperationException(
-                            $"YouTube upload failed: {progress.Exception?.Message}");
+                    throw new InvalidOperationException(
+                        $"YouTube upload failed: {progress.Exception?.Message}");
                 }
             };
 
-            // -------------------------------------------------------------
-            // 6) Finalizasyon hook
-            // -------------------------------------------------------------
             request.ResponseReceived += response =>
             {
                 uploadedVideoId = response.Id;
             };
 
-            // -------------------------------------------------------------
-            // 7) Upload başlat
-            // -------------------------------------------------------------
             await request.UploadAsync(ct);
 
             if (string.IsNullOrWhiteSpace(uploadedVideoId))

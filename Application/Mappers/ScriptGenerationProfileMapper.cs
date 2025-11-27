@@ -35,6 +35,10 @@ namespace Application.Mappers
                 TtsAiConnectionId = e.TtsAiConnectionId,
                 TtsAiConnectionName = e.TtsAiConnection?.Name,
 
+                // 🎤 STT AI
+                SttAiConnectionId = e.SttAiConnectionId,
+                SttAiConnectionName = e.SttAiConnection?.Name,
+
                 // 🎬 Video AI
                 VideoAiConnectionId = e.VideoAiConnectionId,
                 VideoAiConnectionName = e.VideoAiConnection?.Name,
@@ -79,6 +83,10 @@ namespace Application.Mappers
                 TtsAiConnectionId = e.TtsAiConnectionId,
                 TtsModelName = e.TtsModelName,
                 TtsVoice = e.TtsVoice,
+
+                // 🎤 STT üretim
+                SttAiConnectionId = e.SttAiConnectionId,
+                SttModelName = e.SttModelName,
 
                 // 🎬 Video üretim
                 VideoAiConnectionId = e.VideoAiConnectionId,

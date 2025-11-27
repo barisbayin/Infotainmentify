@@ -1,6 +1,6 @@
 ﻿namespace Core.Enums
 {
-    public enum AutoVideoPipelineStatus
+    public enum ContentPipelineStatus
     {
         Pending,
         SelectingTopic,

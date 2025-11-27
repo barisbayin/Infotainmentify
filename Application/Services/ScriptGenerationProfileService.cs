@@ -111,6 +111,9 @@ namespace Application.Services
                     TtsModelName = dto.TtsModelName,
                     TtsVoice = dto.TtsVoice,
 
+                    SttAiConnectionId = dto.SttAiConnectionId,
+                    SttModelName = dto.SttModelName,
+
                     // 🎬 Video
                     VideoAiConnectionId = dto.VideoAiConnectionId,
                     VideoModelName = dto.VideoModelName,
@@ -160,6 +163,9 @@ namespace Application.Services
             entity.TtsAiConnectionId = dto.TtsAiConnectionId;
             entity.TtsModelName = dto.TtsModelName;
             entity.TtsVoice = dto.TtsVoice;
+
+            entity.SttAiConnectionId = dto.SttAiConnectionId;
+            entity.SttModelName = dto.SttModelName;
 
             // 🎬 Video
             entity.VideoAiConnectionId = dto.VideoAiConnectionId;

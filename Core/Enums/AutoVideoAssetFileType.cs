@@ -6,6 +6,8 @@
         Image = 1,            // Sahne görseli
         Audio = 2,            // TTS çıktı
         RawScene = 3,         // AI'nın ürettiği sahne JSON verisi
+        Captions = 4,         // Sahne altyazı dosyası (SRT/WEBVTT)
+        Video = 5,
 
         // Render Ara Assetleri
         RenderInput = 10,     // Render'a girecek sahne birleşimi (image + audio pair)

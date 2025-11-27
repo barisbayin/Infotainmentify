@@ -1,5 +1,6 @@
 ﻿using Application.Contracts.UserSocialChannel;
 using Application.Services;
+using Google.Apis.Auth.OAuth2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -61,5 +62,33 @@ namespace WebAPI.Controllers
             await _svc.DeleteAsync(id, ct);
             return NoContent();
         }
+
+
+        //[HttpGet("oauth/youtube/callback")]
+        //public async Task<IActionResult> YouTubeCallback(string code)
+        //{
+        //    var redirectUri = "https://seninsite.com/oauth/youtube/callback";
+
+        //    var tokenResponse = await GoogleWebAuthorizationBroker.ExchangeCodeForTokenAsync(
+        //        clientId, clientSecret, code, redirectUri, CancellationToken.None);
+
+        //    // refresh token
+        //    var refreshToken = tokenResponse.RefreshToken;
+        //    var accessToken = tokenResponse.AccessToken;
+
+        //    if (string.IsNullOrEmpty(refreshToken))
+        //        return BadRequest("Refresh token alınamadı");
+
+        //    // ŞİMDİ: refresh token’ı DB’de güncelle
+        //    await _userSocialChannelService.UpdateTokensAsync(userId, new
+        //    {
+        //        refresh_token = refreshToken,
+        //        access_token = accessToken,
+        //        expires_in = tokenResponse.ExpiresInSeconds,
+        //        created_at = DateTime.UtcNow
+        //    });
+
+        //    return Redirect("/social-channels?connected=youtube");
+        //}
     }
 }

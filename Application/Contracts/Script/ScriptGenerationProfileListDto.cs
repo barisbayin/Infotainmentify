@@ -29,6 +29,10 @@
         public int? TtsAiConnectionId { get; set; }
         public string? TtsAiConnectionName { get; set; }
 
+        // 🗣️ TTS AI
+        public int? SttAiConnectionId { get; set; }
+        public string? SttAiConnectionName { get; set; }
+
         // 🎬 Video AI
         public int? VideoAiConnectionId { get; set; }
         public string? VideoAiConnectionName { get; set; }

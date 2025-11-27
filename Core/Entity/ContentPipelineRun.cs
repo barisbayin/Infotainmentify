@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
-    public class AutoVideoPipeline : BaseEntity
+    public class ContentPipelineRun : BaseEntity
     {
         // ---- Kullanıcı ----
         public int AppUserId { get; set; }
@@ -66,10 +66,12 @@ namespace Core.Entity
 
         // ---- Log ve Durum ----
         public string? LogJson { get; set; }        // JSON array (string[])
-        public AutoVideoPipelineStatus Status { get; set; } = AutoVideoPipelineStatus.Pending;
+        public ContentPipelineStatus Status { get; set; } = ContentPipelineStatus.Pending;
 
         [MaxLength(500)]
         public string? ErrorMessage { get; set; }
         public DateTime CompletedAt { get; set; }
+
+        public List<StageConfig> Stages { get; set; } = new();
     }
 }

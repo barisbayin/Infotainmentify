@@ -38,19 +38,24 @@ namespace Infrastructure.Configurations
             b.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.AppUserId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.NoAction);
 
             // ScriptGenerationProfile
             b.HasOne(x => x.ScriptGenerationProfile)
                 .WithMany()
                 .HasForeignKey(x => x.ScriptGenerationProfileId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.NoAction);
+
+            b.HasOne(x => x.AutoVideoRenderProfile)
+                .WithMany()
+                .HasForeignKey(x => x.AutoVideoRenderProfileId)
+                .OnDelete(DeleteBehavior.NoAction);
 
             // SocialChannel (nullable FK)
             b.HasOne(x => x.SocialChannel)
                 .WithMany()
                 .HasForeignKey(x => x.SocialChannelId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.NoAction);
         }
     }
 }

@@ -14,7 +14,7 @@ namespace Application.Mappers
         {
             { JobType.TopicGeneration, typeof(TopicGenerationProfile) },
             { JobType.ScriptGeneration, typeof(ScriptGenerationProfile) },
-            //{ JobType.YouTubeUpload, typeof(YouTubeUploadProfile) },
+            { JobType.AutoVideoGeneration, typeof(VideoGenerationProfile) },
             //{ JobType.ThumbnailRender, typeof(ThumbnailRenderProfile) }
         };
 

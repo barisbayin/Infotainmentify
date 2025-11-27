@@ -79,7 +79,7 @@ namespace Infrastructure.Migrations
                     b.ToTable("AppUsers", (string)null);
                 });
 
-            modelBuilder.Entity("Core.Entity.AutoVideoAsset", b =>
+            modelBuilder.Entity("Core.Entity.AutoVideoAssetFile", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -90,18 +90,112 @@ namespace Infrastructure.Migrations
                     b.Property<int>("AppUserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("AssetKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("AutoVideoPipelineId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2(0)")
                         .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("FileType")
+                        .HasColumnType("int");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<string>("Log")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<bool>("IsGenerated")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MetadataJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<bool>("Removed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("datetime2(0)");
+
+                    b.Property<int>("SceneNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2(0)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
+
+                    b.HasIndex("AutoVideoPipelineId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Removed");
+
+                    b.ToTable("AutoVideoAssetFile");
+                });
+
+            modelBuilder.Entity("Core.Entity.AutoVideoPipeline", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AudioPathsJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<DateTime>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2(0)")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("FinalDescription")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("FinalTitle")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ImagePathsJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("LogJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<int>("ProfileId")
                         .HasColumnType("int");
@@ -117,6 +211,9 @@ namespace Infrastructure.Migrations
                     b.Property<int?>("ScriptId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("SocialChannelId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -130,16 +227,19 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2(0)");
 
-                    b.Property<string>("UploadPlatform")
+                    b.Property<bool>("Uploaded")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UploadedPlatform")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("UploadVideoId")
+                    b.Property<string>("UploadedVideoId")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
-
-                    b.Property<bool>("Uploaded")
-                        .HasColumnType("bit");
 
                     b.Property<string>("VideoPath")
                         .HasMaxLength(500)
@@ -157,18 +257,14 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("ScriptId");
 
-                    b.HasIndex("Status");
+                    b.HasIndex("SocialChannelId");
 
                     b.HasIndex("TopicId");
 
-                    b.HasIndex("UploadPlatform");
-
-                    b.HasIndex("UploadVideoId");
-
-                    b.ToTable("AutoVideoAssets", (string)null);
+                    b.ToTable("AutoVideoPipeline");
                 });
 
-            modelBuilder.Entity("Core.Entity.AutoVideoAssetProfile", b =>
+            modelBuilder.Entity("Core.Entity.AutoVideoRenderProfile", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -176,76 +272,167 @@ namespace Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AiRecommendedCaption")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("AiRecommendedStyle")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("AiRecommendedTransitions")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<int>("AppUserId")
                         .HasColumnType("int");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2(0)")
-                        .HasDefaultValueSql("GETDATE()");
+                    b.Property<int>("BgmVolume")
+                        .HasColumnType("int");
 
-                    b.Property<string>("DescriptionTemplate")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                    b.Property<int>("CaptionAnimation")
+                        .HasColumnType("int");
 
-                    b.Property<bool>("GenerateThumbnail")
+                    b.Property<double>("CaptionBackgroundOpacity")
+                        .HasColumnType("float");
+
+                    b.Property<int>("CaptionChunkSize")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CaptionFont")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<bool>("CaptionGlow")
                         .HasColumnType("bit");
+
+                    b.Property<string>("CaptionGlowColor")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int>("CaptionGlowSize")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CaptionHighlightColor")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<bool>("CaptionKaraoke")
+                        .HasColumnType("bit");
+
+                    b.Property<double>("CaptionLineSpacing")
+                        .HasColumnType("float");
+
+                    b.Property<int>("CaptionMarginV")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CaptionMaxWidthPercent")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CaptionOutlineSize")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CaptionPosition")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CaptionShadowSize")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CaptionSize")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CaptionStyle")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DuckingStrength")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Fps")
+                        .HasColumnType("int");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
+                        .HasColumnType("bit");
 
-                    b.Property<string>("ProfileName")
+                    b.Property<double>("MotionIntensity")
+                        .HasColumnType("float");
+
+                    b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<double>("PanX")
+                        .HasColumnType("float");
+
+                    b.Property<double>("PanY")
+                        .HasColumnType("float");
 
                     b.Property<bool>("Removed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
+                        .HasColumnType("bit");
 
                     b.Property<DateTime?>("RemovedAt")
-                        .HasColumnType("datetime2(0)");
+                        .HasColumnType("datetime2");
 
-                    b.Property<int>("ScriptGenerationProfileId")
-                        .HasColumnType("int");
+                    b.Property<string>("Resolution")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
 
-                    b.Property<int?>("SocialChannelId")
-                        .HasColumnType("int");
+                    b.Property<string>("Style")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("TitleTemplate")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                    b.Property<string>("TimelineMode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
 
-                    b.Property<int>("TopicGenerationProfileId")
-                        .HasColumnType("int");
+                    b.Property<string>("Transition")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("TransitionDirection")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<double>("TransitionDuration")
+                        .HasColumnType("float");
+
+                    b.Property<string>("TransitionEasing")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<double>("TransitionStrength")
+                        .HasColumnType("float");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2(0)");
+                        .HasColumnType("datetime2");
 
-                    b.Property<bool>("UploadAfterRender")
-                        .HasColumnType("bit");
+                    b.Property<int>("VoiceVolume")
+                        .HasColumnType("int");
+
+                    b.Property<double>("ZoomMax")
+                        .HasColumnType("float");
+
+                    b.Property<double>("ZoomSpeed")
+                        .HasColumnType("float");
 
                     b.HasKey("Id");
 
                     b.HasIndex("AppUserId");
 
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("Removed");
-
-                    b.HasIndex("ScriptGenerationProfileId");
-
-                    b.HasIndex("SocialChannelId");
-
-                    b.HasIndex("TopicGenerationProfileId");
-
-                    b.HasIndex("AppUserId", "ProfileName")
-                        .IsUnique();
-
-                    b.ToTable("AutoVideoAssetProfiles", (string)null);
+                    b.ToTable("AutoVideoRenderProfiles", (string)null);
                 });
 
             modelBuilder.Entity("Core.Entity.JobExecution", b =>
@@ -680,12 +867,19 @@ namespace Infrastructure.Migrations
                         .HasColumnType("nvarchar(50)")
                         .HasDefaultValue("Pending");
 
+                    b.Property<int?>("SttAiConnectionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SttModelName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<float>("Temperature")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("real")
                         .HasDefaultValue(0.8f);
 
-                    b.Property<int?>("TopicGenerationProfileId")
+                    b.Property<int>("TopicGenerationProfileId")
                         .HasColumnType("int");
 
                     b.Property<int?>("TtsAiConnectionId")
@@ -726,6 +920,8 @@ namespace Infrastructure.Migrations
                     b.HasIndex("PromptId");
 
                     b.HasIndex("Removed");
+
+                    b.HasIndex("SttAiConnectionId");
 
                     b.HasIndex("TopicGenerationProfileId");
 
@@ -989,6 +1185,10 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("CredentialFilePath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<string>("EncryptedCredentialJson")
                         .IsRequired()
                         .HasMaxLength(4000)
@@ -1186,63 +1386,149 @@ namespace Infrastructure.Migrations
                     b.ToTable("VideoAssets", (string)null);
                 });
 
-            modelBuilder.Entity("Core.Entity.AutoVideoAsset", b =>
+            modelBuilder.Entity("Core.Entity.VideoGenerationProfile", b =>
                 {
-                    b.HasOne("Core.Entity.AppUser", null)
-                        .WithMany()
-                        .HasForeignKey("AppUserId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
 
-                    b.HasOne("Core.Entity.AutoVideoAssetProfile", null)
-                        .WithMany()
-                        .HasForeignKey("ProfileId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.HasOne("Core.Entity.Script", null)
-                        .WithMany()
-                        .HasForeignKey("ScriptId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("int");
 
-                    b.HasOne("Core.Entity.Topic", null)
-                        .WithMany()
-                        .HasForeignKey("TopicId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                    b.Property<int?>("AutoVideoRenderProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2(0)")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<string>("DescriptionTemplate")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("GenerateThumbnail")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("ProfileName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("Removed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("datetime2(0)");
+
+                    b.Property<int>("ScriptGenerationProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SocialChannelId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TitleTemplate")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2(0)");
+
+                    b.Property<bool>("UploadAfterRender")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
+
+                    b.HasIndex("AutoVideoRenderProfileId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Removed");
+
+                    b.HasIndex("ScriptGenerationProfileId");
+
+                    b.HasIndex("SocialChannelId");
+
+                    b.ToTable("VideoGenerationProfiles", (string)null);
                 });
 
-            modelBuilder.Entity("Core.Entity.AutoVideoAssetProfile", b =>
+            modelBuilder.Entity("Core.Entity.AutoVideoAssetFile", b =>
                 {
                     b.HasOne("Core.Entity.AppUser", "User")
                         .WithMany()
                         .HasForeignKey("AppUserId")
-                        .OnDelete(DeleteBehavior.NoAction)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Core.Entity.ScriptGenerationProfile", "ScriptGenerationProfile")
+                    b.HasOne("Core.Entity.AutoVideoPipeline", "Pipeline")
                         .WithMany()
-                        .HasForeignKey("ScriptGenerationProfileId")
-                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasForeignKey("AutoVideoPipelineId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Pipeline");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Core.Entity.AutoVideoPipeline", b =>
+                {
+                    b.HasOne("Core.Entity.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.VideoGenerationProfile", "Profile")
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.Script", "Script")
+                        .WithMany()
+                        .HasForeignKey("ScriptId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Core.Entity.UserSocialChannel", "SocialChannel")
                         .WithMany()
                         .HasForeignKey("SocialChannelId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Core.Entity.TopicGenerationProfile", "TopicGenerationProfile")
+                    b.HasOne("Core.Entity.Topic", "Topic")
                         .WithMany()
-                        .HasForeignKey("TopicGenerationProfileId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
-                    b.Navigation("ScriptGenerationProfile");
+                    b.Navigation("Profile");
+
+                    b.Navigation("Script");
 
                     b.Navigation("SocialChannel");
 
-                    b.Navigation("TopicGenerationProfile");
+                    b.Navigation("Topic");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Core.Entity.AutoVideoRenderProfile", b =>
+                {
+                    b.HasOne("Core.Entity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Core.Entity.JobExecution", b =>
@@ -1332,10 +1618,16 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
+                    b.HasOne("Core.Entity.UserAiConnection", "SttAiConnection")
+                        .WithMany()
+                        .HasForeignKey("SttAiConnectionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("Core.Entity.TopicGenerationProfile", "TopicGenerationProfile")
                         .WithMany()
                         .HasForeignKey("TopicGenerationProfileId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
 
                     b.HasOne("Core.Entity.UserAiConnection", "TtsAiConnection")
                         .WithMany()
@@ -1352,6 +1644,8 @@ namespace Infrastructure.Migrations
                     b.Navigation("ImageAiConnection");
 
                     b.Navigation("Prompt");
+
+                    b.Navigation("SttAiConnection");
 
                     b.Navigation("TopicGenerationProfile");
 
@@ -1437,6 +1731,39 @@ namespace Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Script");
+                });
+
+            modelBuilder.Entity("Core.Entity.VideoGenerationProfile", b =>
+                {
+                    b.HasOne("Core.Entity.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.AutoVideoRenderProfile", "AutoVideoRenderProfile")
+                        .WithMany()
+                        .HasForeignKey("AutoVideoRenderProfileId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Core.Entity.ScriptGenerationProfile", "ScriptGenerationProfile")
+                        .WithMany()
+                        .HasForeignKey("ScriptGenerationProfileId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.UserSocialChannel", "SocialChannel")
+                        .WithMany()
+                        .HasForeignKey("SocialChannelId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("AutoVideoRenderProfile");
+
+                    b.Navigation("ScriptGenerationProfile");
+
+                    b.Navigation("SocialChannel");
+
+                    b.Navigation("User");
                 });
 #pragma warning restore 612, 618
         }

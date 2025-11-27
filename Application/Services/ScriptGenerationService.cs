@@ -357,11 +357,12 @@ namespace Application.Services
         public async Task<Script> GenerateSingleAsync(
     int scriptProfileId,
     Topic topic,
+    int? userId,
     CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
-            var userId = _current.UserId;
+            userId ??= _current.UserId;
 
             // 1) ScriptGenerationProfile çek
             var profile = await _profileRepo.GetByIdAsync(scriptProfileId, asNoTracking: true, ct)
@@ -408,7 +409,8 @@ namespace Application.Services
                 .Replace("{{LANGUAGE}}", language)
                 .Replace("{{POTENTIAL_VISUAL}}", topic.PotentialVisual ?? "")
                 .Replace("{{RENDER_STYLE}}", renderStyle)
-                .Replace("{{PRODUCTION_TYPE}}", productionType);
+                .Replace("{{PRODUCTION_TYPE}}", productionType)
+                .Replace("{{TOPIC_JSON}}", topic.TopicJson);
 
             // 6) Script AI request
             var req = new ScriptGenerationRequest
@@ -437,7 +439,7 @@ namespace Application.Services
             // 8) Script DB entity oluştur
             var script = new Script
             {
-                UserId = userId,
+                UserId = userId.Value,
                 TopicId = topic.Id,
                 Title = $"Script for {topic.TopicCode}",
                 Content = scriptResult,

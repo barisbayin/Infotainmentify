@@ -95,6 +95,16 @@ namespace Core.Entity
         [MaxLength(50)]
         public string? TtsVoice { get; set; }
 
+
+        public int? SttAiConnectionId { get; set; }
+
+        [ForeignKey(nameof(SttAiConnectionId))]
+        public UserAiConnection? SttAiConnection { get; set; }
+
+        [MaxLength(100)]
+        public string? SttModelName { get; set; }
+
+
         // 🎬 Video Render
         public int? VideoAiConnectionId { get; set; }
 

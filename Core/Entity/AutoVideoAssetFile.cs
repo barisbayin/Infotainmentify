@@ -1,6 +1,5 @@
 ﻿using Core.Enums;
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
@@ -10,7 +9,7 @@ namespace Core.Entity
         public AppUser User { get; set; } = null!;
 
         public int AutoVideoPipelineId { get; set; }
-        public AutoVideoPipeline Pipeline { get; set; } = null!;
+        public ContentPipelineRun Pipeline { get; set; } = null!;
 
         // Hangi sahneye ait
         public int SceneNumber { get; set; }

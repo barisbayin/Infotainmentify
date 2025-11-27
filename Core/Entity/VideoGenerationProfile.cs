@@ -21,6 +21,12 @@ namespace Core.Entity
         [ForeignKey(nameof(ScriptGenerationProfileId))]
         public ScriptGenerationProfile ScriptGenerationProfile { get; set; } = null!;
 
+        // Render profili
+        public int? AutoVideoRenderProfileId { get; set; }
+
+        [ForeignKey(nameof(AutoVideoRenderProfileId))]
+        public AutoVideoRenderProfile? AutoVideoRenderProfile { get; set; } = null!;
+
         // Upload behavior
         public int? SocialChannelId { get; set; }
 

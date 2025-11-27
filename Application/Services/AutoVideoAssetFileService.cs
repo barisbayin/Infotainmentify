@@ -2,6 +2,7 @@
 using Core.Contracts;
 using Core.Entity;
 using Core.Enums;
+using System.Text.Json;
 
 namespace Application.Services
 {
@@ -27,6 +28,8 @@ namespace Application.Services
             int scene,
             string path,
             AutoVideoAssetFileType type,
+            string? key = null,
+            object? metadata = null,
             CancellationToken ct = default)
         {
             var file = new AutoVideoAssetFile
@@ -36,6 +39,8 @@ namespace Application.Services
                 SceneNumber = scene,
                 FilePath = path,
                 FileType = type,
+                AssetKey = key,
+                MetadataJson = metadata != null ? JsonSerializer.Serialize(metadata) : null,
                 CreatedAt = DateTime.Now
             };
 
@@ -47,7 +52,7 @@ namespace Application.Services
         // MULTI ADD
         public async Task AddMultipleAsync(
             int pipelineId,
-            IEnumerable<(int Scene, string Path, AutoVideoAssetFileType Type)> items,
+            IEnumerable<(int Scene, string Path, AutoVideoAssetFileType Type, string? Key, object? Metadata)> items,
             CancellationToken ct = default)
         {
             var entities = items.Select(i => new AutoVideoAssetFile
@@ -57,6 +62,8 @@ namespace Application.Services
                 SceneNumber = i.Scene,
                 FilePath = i.Path,
                 FileType = i.Type,
+                AssetKey = i.Key,
+                MetadataJson = i.Metadata != null ? JsonSerializer.Serialize(i.Metadata) : null,
                 CreatedAt = DateTime.Now
             });
 
@@ -119,6 +126,38 @@ namespace Application.Services
                 return false;
 
             entity.FilePath = newPath;
+            entity.UpdatedAt = DateTime.Now;
+
+            _repo.Update(entity);
+            await _uow.SaveChangesAsync(ct);
+
+            return true;
+        }
+
+        // UPDATE metadata
+        public async Task<bool> UpdateMetadataAsync(int id, object metadata, CancellationToken ct = default)
+        {
+            var entity = await GetAsync(id, ct);
+            if (entity == null)
+                return false;
+
+            entity.MetadataJson = JsonSerializer.Serialize(metadata);
+            entity.UpdatedAt = DateTime.Now;
+
+            _repo.Update(entity);
+            await _uow.SaveChangesAsync(ct);
+
+            return true;
+        }
+
+        // UPDATE asset key
+        public async Task<bool> UpdateKeyAsync(int id, string key, CancellationToken ct = default)
+        {
+            var entity = await GetAsync(id, ct);
+            if (entity == null)
+                return false;
+
+            entity.AssetKey = key;
             entity.UpdatedAt = DateTime.Now;
 
             _repo.Update(entity);

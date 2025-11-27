@@ -5,11 +5,22 @@ namespace Application
 {
     public class DataProtectionSecretStore : ISecretStore
     {
-        private readonly IDataProtector _protector;
         public DataProtectionSecretStore(IDataProtectionProvider provider)
-            => _protector = provider.CreateProtector("UserAiConnections.v1");
+        {
+            // provider kullanılmayacak
+        }
 
-        public string Protect(string plain) => _protector.Protect(plain);
-        public string Unprotect(string cipher) => _protector.Unprotect(cipher);
+        public string Protect(string plain)
+        {
+            // DEV ortam: direkt geri döndür
+            return plain ?? "";
+        }
+
+        public string Unprotect(string cipher)
+        {
+            // DEV ortam: direkt geri döndür
+            return cipher ?? "";
+        }
     }
+
 }

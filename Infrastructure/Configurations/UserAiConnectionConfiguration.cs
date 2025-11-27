@@ -11,6 +11,8 @@ namespace Infrastructure.Configurations
             b.ToTable("UserAiConnections");
             b.HasIndex(x => new { x.UserId, x.Name }).IsUnique();
             b.Property(x => x.EncryptedCredentialJson).HasColumnType("nvarchar(max)");
+
+
         }
     }
 }

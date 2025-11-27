@@ -1,13 +1,8 @@
-﻿using Core.Contracts;
-using Core.Entity;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
-using Application.Contracts.AutoVideoAsset;
+﻿using Application.Contracts.AutoVideoAsset;
 using Application.Mappers;
+using Core.Contracts;
+using Core.Entity;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services
 {
@@ -93,7 +88,8 @@ namespace Application.Services
                     GenerateThumbnail = dto.GenerateThumbnail,
                     TitleTemplate = dto.TitleTemplate,
                     DescriptionTemplate = dto.DescriptionTemplate,
-                    IsActive = true
+                    IsActive = true,
+                    AutoVideoRenderProfileId = dto.AutoVideoRenderProfileId,
                 };
 
                 await _repo.AddAsync(e, ct);
@@ -119,6 +115,7 @@ namespace Application.Services
             entity.TitleTemplate = dto.TitleTemplate;
             entity.DescriptionTemplate = dto.DescriptionTemplate;
             entity.IsActive = dto.IsActive;
+            entity.AutoVideoRenderProfileId = dto.AutoVideoRenderProfileId;
 
             _repo.Update(entity);
             await _uow.SaveChangesAsync(ct);

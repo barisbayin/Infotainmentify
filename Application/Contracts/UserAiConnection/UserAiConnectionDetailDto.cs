@@ -2,6 +2,7 @@
 {
     public class UserAiConnectionDetailDto : UserAiConnectionListDto
     {
-        public Dictionary<string, string>? Credentials { get; set; }
+        public string? CredentialFilePath { get; set; }
+        public string? Credentials { get; set; }   // ← STRING OLMALI
     }
 }

@@ -32,5 +32,8 @@ namespace Core.Entity
 
         [Required, MaxLength(4000)]
         public string EncryptedCredentialJson { get; set; } = null!;
+
+        [MaxLength(1000)]
+        public string? CredentialFilePath { get; set; }
     }
 }

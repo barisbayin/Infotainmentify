@@ -34,12 +34,37 @@ namespace Application.Services
             return _current.UserId;
         }
 
-        // ----------------- QUERIES -----------------
+        // ----------------------------------------------------
+        // HELPER: JSON -> file save
+        // ----------------------------------------------------
+        private string SaveCredentialFile(int userId, Dictionary<string, string> creds)
+        {
+            var baseDir = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "APP_FILES",
+                "ai_credentials",
+                $"user_{userId}"
+            );
 
+            Directory.CreateDirectory(baseDir);
+
+            // tüm credential dict’i tek dosyada yaz
+            var path = Path.Combine(baseDir, $"creds_{Guid.NewGuid():N}.json");
+
+            File.WriteAllText(path, JsonSerializer.Serialize(creds));
+
+            return path;
+        }
+
+
+        // ----------------------------------------------------
+        // QUERIES
+        // ----------------------------------------------------
         public async Task<IReadOnlyList<UserAiConnectionListDto>> ListAsync(CancellationToken ct)
         {
             var userId = RequireUser();
             var list = await _repo.FindAsync(x => x.UserId == userId, asNoTracking: true, ct);
+
             return list.Select(x => new UserAiConnectionListDto
             {
                 Id = x.Id,
@@ -56,9 +81,10 @@ namespace Application.Services
         {
             var userId = RequireUser();
             var e = await _repo.GetByIdAsync(id, asNoTracking: true, ct);
-            if (e is null || e.UserId != userId) return null;
+            if (e is null || e.UserId != userId)
+                return null;
 
-            var creds = SafeDecrypt(e.EncryptedCredentialJson);
+            var json = SafeDecrypt(e.EncryptedCredentialJson);
 
             return new UserAiConnectionDetailDto
             {
@@ -69,12 +95,15 @@ namespace Application.Services
                 ImageModel = e.ImageModel,
                 VideoModel = e.VideoModel,
                 Temperature = e.Temperature,
-                Credentials = creds
+                Credentials = json,   // DICTIONARY DEĞİL, STRING JSON!
+                CredentialFilePath = e.CredentialFilePath
             };
         }
 
-        // ----------------- COMMANDS -----------------
 
+        // ----------------------------------------------------
+        // CREATE
+        // ----------------------------------------------------
         public async Task<int> CreateAsync(UserAiConnectionDetailDto dto, CancellationToken ct)
         {
             var userId = RequireUser();
@@ -86,7 +115,15 @@ namespace Application.Services
             if (exists)
                 throw new InvalidOperationException("Connection name already exists.");
 
-            var enc = _secret.Protect(JsonSerializer.Serialize(dto.Credentials ?? new Dictionary<string, string>()));
+            // FE’den gelen credentials string → dictionary’e parse
+            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(dto.Credentials ?? "{}")
+                       ?? new Dictionary<string, string>();
+
+            // file save
+            var filePath = SaveCredentialFile(userId, dict);
+
+            // string JSON’u crypto ile koru
+            var enc = _secret.Protect(dto.Credentials ?? "{}");
 
             var entity = new UserAiConnection
             {
@@ -97,7 +134,8 @@ namespace Application.Services
                 ImageModel = dto.ImageModel,
                 VideoModel = dto.VideoModel,
                 Temperature = dto.Temperature,
-                EncryptedCredentialJson = enc
+                EncryptedCredentialJson = enc,
+                CredentialFilePath = filePath
             };
 
             await _repo.AddAsync(entity, ct);
@@ -105,6 +143,10 @@ namespace Application.Services
             return entity.Id;
         }
 
+
+        // ----------------------------------------------------
+        // UPDATE
+        // ----------------------------------------------------
         public async Task UpdateAsync(int id, UserAiConnectionDetailDto dto, CancellationToken ct)
         {
             var userId = RequireUser();
@@ -118,18 +160,37 @@ namespace Application.Services
             if (string.IsNullOrWhiteSpace(dto.Name))
                 throw new InvalidOperationException("Name is required.");
 
+            // FE’den gelen string JSON → dictionary
+            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(dto.Credentials ?? "{}")
+                       ?? new Dictionary<string, string>();
+
+            // eski dosya sil
+            if (!string.IsNullOrWhiteSpace(e.CredentialFilePath) && File.Exists(e.CredentialFilePath))
+                File.Delete(e.CredentialFilePath);
+
+            // yeni dosya yaz
+            var newPath = SaveCredentialFile(userId, dict);
+
+            // string JSON encrypt
+            var enc = _secret.Protect(dto.Credentials ?? "{}");
+
             e.Name = dto.Name.Trim();
             e.Provider = Enum.Parse<AiProviderType>(dto.Provider);
             e.TextModel = dto.TextModel;
             e.ImageModel = dto.ImageModel;
             e.VideoModel = dto.VideoModel;
             e.Temperature = dto.Temperature;
-            e.EncryptedCredentialJson = _secret.Protect(JsonSerializer.Serialize(dto.Credentials ?? new Dictionary<string, string>()));
+            e.EncryptedCredentialJson = enc;
+            e.CredentialFilePath = newPath;
 
             _repo.Update(e);
             await _uow.SaveChangesAsync(ct);
         }
 
+
+        // ----------------------------------------------------
+        // DELETE
+        // ----------------------------------------------------
         public async Task DeleteAsync(int id, CancellationToken ct)
         {
             var userId = RequireUser();
@@ -139,25 +200,28 @@ namespace Application.Services
             if (e.UserId != userId)
                 throw new InvalidOperationException("Forbidden");
 
+            if (!string.IsNullOrWhiteSpace(e.CredentialFilePath) && File.Exists(e.CredentialFilePath))
+                File.Delete(e.CredentialFilePath);
+
             _repo.Delete(e);
             await _uow.SaveChangesAsync(ct);
         }
 
-        // ----------------- HELPERS -----------------
-
-        private Dictionary<string, string> SafeDecrypt(string cipher)
+        // ----------------------------------------------------
+        // HELPERS
+        // ----------------------------------------------------
+        private string SafeDecrypt(string cipher)
         {
             try
             {
-                var json = _secret.Unprotect(cipher) ?? "{}";
-                return JsonSerializer.Deserialize<Dictionary<string, string>>(json)
-                       ?? new Dictionary<string, string>();
+                return _secret.Unprotect(cipher) ?? "{}";
             }
             catch
             {
-                return new Dictionary<string, string>();
+                return "{}";
             }
         }
+
 
         public async Task<UserAiConnection> GetActiveAsync(int id, CancellationToken ct)
         {
@@ -172,6 +236,5 @@ namespace Application.Services
 
             return e;
         }
-
     }
 }

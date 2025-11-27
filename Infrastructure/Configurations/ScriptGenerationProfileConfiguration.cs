@@ -107,6 +107,11 @@ namespace Infrastructure.Configurations
             builder.Property(e => e.TtsVoice)
                 .HasMaxLength(50);
 
+            builder.HasOne(e => e.SttAiConnection)
+                .WithMany()
+                .HasForeignKey(e => e.SttAiConnectionId)
+                .OnDelete(DeleteBehavior.NoAction);
+
             // 🔹 Video AI Relations
             builder.HasOne(e => e.VideoAiConnection)
                 .WithMany()

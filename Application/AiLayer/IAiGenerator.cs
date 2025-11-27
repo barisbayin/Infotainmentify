@@ -46,6 +46,7 @@ namespace Application.AiLayer
         // ======================================================
         Task<byte[]> GenerateImageAsync(
             string prompt,
+            string? negativePrompt,
             string size = "1080x1920",
             string? style = null,
             string? model = null,
@@ -58,11 +59,14 @@ namespace Application.AiLayer
         /// Metinden ses üretir (TTS). Dönüş değeri MP3/WAV formatlı byte dizisidir.
         /// </summary>
         Task<byte[]> GenerateAudioAsync(
-            string text,
-            string? voice = null,
-            string? model = null,
-            string? format = "mp3",
-            CancellationToken ct = default);
+           string text,
+           string voiceName,
+           string languageCode,
+           string modelName,
+           string ratePercent,   // e.g. "-5%" or "+10%"
+           string pitchString,   // e.g. "+0Hz" or "+50Hz"
+           string audioEncoding = "MP3",
+           CancellationToken ct = default);
 
         // ======================================================
         // 🔤 EMBEDDING (vektör temsili)
@@ -76,5 +80,14 @@ namespace Application.AiLayer
         // 💚 HEALTH CHECK
         // ======================================================
         Task<bool> TestConnectionAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Ses dosyasından metin çıkarır (STT) ve kelime bazlı timestamp bilgilerini döner.
+        /// </summary>
+        Task<SpeechToTextResult> SpeechToTextAsync(
+            byte[] audioData,
+            string languageCode = "en-US",
+            string? model = null,
+            CancellationToken ct = default);
     }
 }

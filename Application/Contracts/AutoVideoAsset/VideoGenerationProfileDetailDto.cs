@@ -7,6 +7,8 @@
 
         public int ScriptGenerationProfileId { get; set; }
 
+        public int AutoVideoRenderProfileId { get; set; }
+
         public int? SocialChannelId { get; set; }
 
         public bool UploadAfterRender { get; set; }

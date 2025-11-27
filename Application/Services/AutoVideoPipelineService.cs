@@ -4,12 +4,13 @@ using Core.Contracts;
 using Core.Entity;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Application.Services
 {
     public class AutoVideoPipelineService
     {
-        private readonly IRepository<AutoVideoPipeline> _pipelineRepo;
+        private readonly IRepository<ContentPipelineRun> _pipelineRepo;
         private readonly IRepository<VideoGenerationProfile> _profileRepo;
         private readonly IRepository<AutoVideoAssetFile> _assetRepo;
         private readonly IRepository<AppUser> _userRepo;
@@ -19,7 +20,7 @@ namespace Application.Services
         private readonly INotifierService _notifier;
 
         public AutoVideoPipelineService(
-            IRepository<AutoVideoPipeline> pipelineRepo,
+            IRepository<ContentPipelineRun> pipelineRepo,
             IRepository<VideoGenerationProfile> profileRepo,
             IRepository<AutoVideoAssetFile> assetRepo,
             IRepository<AppUser> userRepo,
@@ -41,58 +42,72 @@ namespace Application.Services
         // ------------------------------------------------------------
         // CREATE PIPELINE
         // ------------------------------------------------------------
-        public async Task<AutoVideoPipeline> CreatePipelineAsync(int profileId, CancellationToken ct)
+        public async Task<ContentPipelineRun> CreatePipelineAsync(int userId, int profileId, CancellationToken ct)
         {
-            ct.ThrowIfCancellationRequested();
-
-            // Profil user'a mı ait?
-            var profile = await _profileRepo.GetByIdAsync(profileId, asNoTracking: true, ct);
-            if (profile == null || profile.AppUserId != _current.UserId)
-                throw new UnauthorizedAccessException("Profile erişilemedi.");
-
-            // Pipeline kaydı oluştur
-            var pipeline = new AutoVideoPipeline
+            try
             {
-                AppUserId = _current.UserId,
-                ProfileId = profileId,
-                Status = AutoVideoPipelineStatus.Pending,
-                CreatedAt = DateTime.Now,
-                LogJson = "[]"
-            };
+                var appUser = await _userRepo.GetByIdAsync(userId);
 
-            await _pipelineRepo.AddAsync(pipeline, ct);
-            await _uow.SaveChangesAsync(ct);
+                ct.ThrowIfCancellationRequested();
 
-            // Klasörleri oluştur
-            await CreatePipelineFolders(pipeline, ct);
+                // Profil user'a mı ait?
+                var profile = await _profileRepo.GetByIdAsync(profileId, asNoTracking: true, ct);
+                if (profile == null || profile.AppUserId != userId)
+                    throw new UnauthorizedAccessException("Profile erişilemedi.");
 
-            // İlk log
-            AppendLog(pipeline, "Pipeline oluşturuldu.");
-            await _uow.SaveChangesAsync(ct);
+                // Pipeline kaydı oluştur
+                var pipeline = new ContentPipelineRun
+                {
+                    AppUserId = userId,
+                    ProfileId = profileId,
+                    Status = ContentPipelineStatus.Pending,
+                    CreatedAt = DateTime.Now,
+                    LogJson = "[]"
+                };
 
-            return pipeline;
+                await _pipelineRepo.AddAsync(pipeline, ct);
+                await _uow.SaveChangesAsync(ct);
+
+                // Klasörleri oluştur
+                await CreatePipelineFolders(pipeline, appUser, ct);
+
+                // İlk log
+                AppendLog(pipeline, "Pipeline oluşturuldu.");
+                await _uow.SaveChangesAsync(ct);
+
+                return pipeline;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in CreatePipelineAsync: {ex.Message}");   
+                throw;
+            }   
         }
 
         // ------------------------------------------------------------
         // GET PIPELINE DETAILS
         // ------------------------------------------------------------
-        public async Task<AutoVideoPipeline?> GetAsync(int id, CancellationToken ct)
+        public async Task<ContentPipelineRun?> GetAsync(int id, CancellationToken ct)
         {
             return await _pipelineRepo.FirstOrDefaultAsync(
                 x => x.Id == id && x.AppUserId == _current.UserId,
                 include: q => q
                     .Include(x => x.Profile)
-                    .Include(x => x.Topic)
+                        .ThenInclude(p => p.AutoVideoRenderProfile)
+                    .Include(x => x.Profile)
+                        .ThenInclude(p => p.ScriptGenerationProfile)
+                    .Include(x => x.Profile)
                     .Include(x => x.Script),
                 asNoTracking: true,
                 ct: ct
             );
+
         }
 
         // ------------------------------------------------------------
         // LIST PIPELINES (USER SCOPED)
         // ------------------------------------------------------------
-        public async Task<IReadOnlyList<AutoVideoPipeline>> ListAsync(CancellationToken ct)
+        public async Task<IReadOnlyList<ContentPipelineRun>> ListAsync(CancellationToken ct)
         {
             return await _pipelineRepo.FindAsync(
                 x => x.AppUserId == _current.UserId,
@@ -108,10 +123,15 @@ namespace Application.Services
         // ------------------------------------------------------------
         // UPDATE STATUS
         // ------------------------------------------------------------
-        public async Task UpdateStatusAsync(int pipelineId, AutoVideoPipelineStatus status, CancellationToken ct)
+        public async Task UpdateStatusAsync(int pipelineId, int? userId, ContentPipelineStatus status, CancellationToken ct)
         {
+            if (!userId.HasValue)
+            {
+                userId = _current.UserId;
+            }
+
             var p = await _pipelineRepo.GetByIdAsync(pipelineId, asNoTracking: false, ct);
-            if (p == null || p.AppUserId != _current.UserId)
+            if (p == null || p.AppUserId != userId)
                 throw new UnauthorizedAccessException("Pipeline bulunamadı veya size ait değil.");
 
             p.Status = status;
@@ -136,21 +156,21 @@ namespace Application.Services
         // ------------------------------------------------------------
         // APPEND LOG
         // ------------------------------------------------------------
-        public void AppendLog(AutoVideoPipeline pipeline, string msg)
+        private void AppendLog(ContentPipelineRun pipeline, string message)
         {
-            var logs = string.IsNullOrWhiteSpace(pipeline.LogJson)
-                ? new List<string>()
-                : System.Text.Json.JsonSerializer.Deserialize<List<string>>(pipeline.LogJson!)!;
+            var logs = !string.IsNullOrWhiteSpace(pipeline.LogJson)
+                ? JsonSerializer.Deserialize<List<string>>(pipeline.LogJson, Utf8JsonOptions) ?? new List<string>()
+                : new List<string>();
 
-            logs.Add($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}");
+            logs.Add($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}");
 
-            pipeline.LogJson = System.Text.Json.JsonSerializer.Serialize(logs);
+            pipeline.LogJson = JsonSerializer.Serialize(logs, Utf8JsonOptions);
         }
 
         // ------------------------------------------------------------
         // HELPER: Add log + save
         // ------------------------------------------------------------
-        public async Task AddLogAsync(AutoVideoPipeline p, string msg, CancellationToken ct)
+        public async Task AddLogAsync(ContentPipelineRun p, string msg, CancellationToken ct)
         {
             AppendLog(p, msg);
             await _uow.SaveChangesAsync(ct);
@@ -165,16 +185,14 @@ namespace Application.Services
         // ------------------------------------------------------------
         // CREATE PIPELINE FOLDERS
         // ------------------------------------------------------------
-        private async Task CreatePipelineFolders(AutoVideoPipeline pipeline, CancellationToken ct)
+        private async Task CreatePipelineFolders(ContentPipelineRun pipeline, AppUser appUser, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
-            var user = await _userRepo.GetByIdAsync(_current.UserId, asNoTracking: true, ct);
-
             // Kullanıcı klasörü zaten var mı? yoksa oluştur
-            await _dir.EnsureUserScaffoldAsync(user!, ct);
+            await _dir.EnsureUserScaffoldAsync(appUser!, ct);
 
-            var root = _dir.GetVideoPipelineRoot(user!, pipeline.Id);
+            var root = _dir.GetVideoPipelineRoot(appUser!, pipeline.Id);
             Directory.CreateDirectory(root);
 
             Directory.CreateDirectory(Path.Combine(root, "assets"));
@@ -184,9 +202,9 @@ namespace Application.Services
 
             Directory.CreateDirectory(Path.Combine(root, "render"));
             Directory.CreateDirectory(Path.Combine(root, "render", "scenes"));
-            Directory.CreateDirectory(Path.Combine(root, "render", "merged"));
+            Directory.CreateDirectory(Path.Combine(root, "render", "final"));
 
-            Directory.CreateDirectory(Path.Combine(root, "final"));
+            //Directory.CreateDirectory(Path.Combine(root, "final"));
             Directory.CreateDirectory(Path.Combine(root, "temp"));
         }
 
@@ -204,5 +222,11 @@ namespace Application.Services
             var user = await _userRepo.GetByIdAsync(_current.UserId, true, ct);
             return Path.Combine(_dir.GetPipelineFinalRoot(user!, pipelineId), "thumbnail.jpg");
         }
+
+        public static readonly JsonSerializerOptions Utf8JsonOptions = new()
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            WriteIndented = false
+        };
     }
 }

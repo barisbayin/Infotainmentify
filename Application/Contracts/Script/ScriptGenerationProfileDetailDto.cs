@@ -39,6 +39,9 @@
         public string? TtsModelName { get; set; }
         public string? TtsVoice { get; set; }
 
+        public int? SttAiConnectionId { get; set; }
+        public string? SttModelName { get; set; }
+
         // 🎬 Video Generation
         public int? VideoAiConnectionId { get; set; }
         public string? VideoModelName { get; set; }

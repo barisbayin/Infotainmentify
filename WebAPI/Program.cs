@@ -1,20 +1,24 @@
 using Application;
 using Application.Abstractions;
 using Application.AiLayer;
+using Application.Executors;
 using Application.Job;
 using Application.Options;
 using Application.Services;
+using Application.SocialPlatform;
 using Core.Abstractions;
 using Core.Entity;
 using Core.Security;
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using Google.Api;
 using Infrastructure;
 using Infrastructure.Job;
 using Infrastructure.Job.JobExecutors;
 using Infrastructure.Persistence;
 using Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -67,13 +71,39 @@ namespace WebAPI
             builder.Services.AddScoped<VideoAssetService>();
             builder.Services.AddScoped<AssetGenerationService>();
             builder.Services.AddScoped<VideoAssetService>();
-            builder.Services.AddScoped<AutoVideoAssetService>();
             builder.Services.AddScoped<AutoVideoPipelineService>();
             builder.Services.AddScoped<UploadVideoService>();
+            builder.Services.AddScoped<YouTubeUploader>();
+            builder.Services.AddScoped<VideoGenerationProfileService>();
+            builder.Services.AddScoped<AutoVideoGenerationService>();
+            builder.Services.AddScoped<AutoVideoAssetFileService>();
+            builder.Services.AddScoped<RenderVideoService>();
+            builder.Services.AddScoped<RenderProfileService>();
+
+            builder.Services.AddSingleton<StageExecutorFactory>();
+
+            // Executors (transient olmalý)
+            builder.Services.AddTransient<TopicStageExecutor>();
+            builder.Services.AddTransient<ContentPlanStageExecutor>();
+            builder.Services.AddTransient<ImageStageExecutor>();
+            builder.Services.AddTransient<TtsStageExecutor>();
+            builder.Services.AddTransient<VideoStageExecutor>();
+            builder.Services.AddTransient<RenderStageExecutor>();
+            builder.Services.AddTransient<UploadStageExecutor>();
+
+            // Ýhtiyaç olursa
+            //builder.Services.AddTransient<VideoAIStageExecutor>();
+            //builder.Services.AddTransient<SttStageExecutor>();
+            //builder.Services.AddTransient<ImageVariationStageExecutor>();
+            //builder.Services.AddTransient<BRollStageExecutor>();
+            //builder.Services.AddTransient<VideoClipStageExecutor>();
+            //services.AddScoped<TikTokUploader>();
+            //services.AddScoped<InstagramUploader>();
             //builder.Services.AddScoped<TopicGenerationService>();
 
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+            builder.Services.AddScoped<ICurrentJobContext , CurrentJobContext>();
 
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
@@ -95,6 +125,8 @@ namespace WebAPI
 
             builder.Services.AddScoped<IJobExecutor, TopicGenerationJobExecutor>();
             builder.Services.AddScoped<IJobExecutor, ScriptGenerationJobExecutor>();
+            builder.Services.AddScoped<IJobExecutor, AutoVideoGenerationJobExecutor>();
+            builder.Services.AddScoped<ISocialUploaderFactory, SocialUploaderFactory>();
 
             builder.Services.AddScoped<IFFmpegService, FFmpegService>();
 
@@ -194,6 +226,9 @@ namespace WebAPI
                     );
                 }
             });
+
+
+            //builder.Services.AddDataProtection().ProtectKeysWithCertificate("");
 
 
             var app = builder.Build();

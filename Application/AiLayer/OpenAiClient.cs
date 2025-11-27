@@ -93,11 +93,12 @@ namespace Application.AiLayer
 
         // ---------------- IMAGE ----------------
         public async Task<byte[]> GenerateImageAsync(
-            string prompt,
-            string size = "1024x1024",
-            string? style = null,
-            string? model = null,
-            CancellationToken ct = default)
+    string prompt,
+    string? negativePrompt,
+    string size = "1080x1920",
+    string? style = null,
+    string? model = null,
+    CancellationToken ct = default)
         {
             var payload = new
             {
@@ -166,6 +167,7 @@ namespace Application.AiLayer
             string text,
             string? voice = null,
             string? model = null,
+            string? languageCode = null,
             string? format = "mp3",
             CancellationToken ct = default)
         {
@@ -209,6 +211,16 @@ namespace Application.AiLayer
             // ✅ API binary ses verisini direkt döndürür
             var bytes = await res.Content.ReadAsByteArrayAsync(ct);
             return bytes;
+        }
+
+        public Task<byte[]> GenerateAudioAsync(string text, string voiceName, string languageCode, string modelName, string ratePercent, string pitchString, string audioEncoding = "MP3", CancellationToken ct = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<SpeechToTextResult> SpeechToTextAsync(byte[] audioData, string languageCode = "en-US", string? model = null, CancellationToken ct = default)
+        {
+            throw new NotImplementedException();
         }
     }
 

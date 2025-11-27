@@ -16,6 +16,9 @@ namespace Application.Mappers
                 ScriptGenerationProfileId = e.ScriptGenerationProfileId,
                 ScriptGenerationProfileName = e.ScriptGenerationProfile?.ProfileName ?? "",
 
+                AutoVideoRenderProfileId = e.AutoVideoRenderProfileId ?? 0,
+                AutoVideoRenderProfileName = e.AutoVideoRenderProfile?.Name ?? "",
+
                 SocialChannelId = e.SocialChannelId,
                 SocialChannelName = e.SocialChannel?.ChannelName
             };
@@ -29,6 +32,7 @@ namespace Application.Mappers
                 ProfileName = e.ProfileName,
                 ScriptGenerationProfileId = e.ScriptGenerationProfileId,
                 SocialChannelId = e.SocialChannelId,
+                AutoVideoRenderProfileId = e.AutoVideoRenderProfileId ?? 0,
 
                 UploadAfterRender = e.UploadAfterRender,
                 GenerateThumbnail = e.GenerateThumbnail,
@@ -44,6 +48,7 @@ namespace Application.Mappers
             e.ProfileName = dto.ProfileName.Trim();
             e.ScriptGenerationProfileId = dto.ScriptGenerationProfileId;
             e.SocialChannelId = dto.SocialChannelId;
+            e.AutoVideoRenderProfileId = dto.AutoVideoRenderProfileId;
 
             e.UploadAfterRender = dto.UploadAfterRender;
             e.GenerateThumbnail = dto.GenerateThumbnail;

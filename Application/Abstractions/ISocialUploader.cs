@@ -1,4 +1,6 @@
-﻿namespace Application.Abstractions
+﻿using Application.Contracts.Script;
+
+namespace Application.Abstractions
 {
     public interface ISocialUploader
     {
@@ -6,11 +8,11 @@
         /// Final video dosyasını platforma yükler ve platform video ID’si döner.
         /// </summary>
         Task<string> UploadAsync(
-            int userId,
-            string filePath,
-            string? title,
-            string? description,
-            IReadOnlyDictionary<string, string> credentials,
-            CancellationToken ct = default);
+           int userId,
+           string videoPath,
+           ScriptContentDto script,
+           IReadOnlyDictionary<string, string> credentials,
+           CancellationToken ct = default
+       );
     }
 }

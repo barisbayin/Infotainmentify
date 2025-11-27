@@ -24,5 +24,7 @@ namespace Application.AiLayer
         /// TTS (seslendirme) üretimi için uygun AI client döndürür.
         /// </summary>
         Task<IAiGenerator> ResolveTtsClientAsync(int userId, int? connectionId, CancellationToken ct = default);
+
+        Task<IAiGenerator> ResolveSttClientAsync(int userId, int? connectionId, CancellationToken ct = default);
     }
 }

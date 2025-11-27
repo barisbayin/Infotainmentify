@@ -54,6 +54,13 @@ namespace Application.AiLayer
             return Resolve(conn.Provider, creds);
         }
 
+        public async Task<IAiGenerator> ResolveSttClientAsync(int userId, int? connectionId, CancellationToken ct = default)
+        {
+            var conn = await GetConnectionAsync(userId, connectionId, ct);
+            var creds = ParseDecryptedCreds(conn.EncryptedCredentialJson);
+            return Resolve(conn.Provider, creds);
+        }
+
         // ---------------------------------------------------------------------
         // 🔒 Yardımcı fonksiyonlar
         // ---------------------------------------------------------------------
