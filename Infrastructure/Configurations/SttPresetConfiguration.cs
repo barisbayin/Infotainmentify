@@ -25,7 +25,7 @@ namespace Infrastructure.Configurations
             b.HasOne(x => x.AppUser)
              .WithMany()
              .HasForeignKey(x => x.AppUserId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
 
             // Connection silinirse preset kullanılamaz, o yüzden bağlantıyı koruyoruz.
             b.HasOne(x => x.UserAiConnection)

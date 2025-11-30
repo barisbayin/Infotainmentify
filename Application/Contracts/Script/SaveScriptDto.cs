@@ -12,6 +12,7 @@ namespace Application.Contracts.Script
         [Required]
         public string Content { get; set; } = default!;
 
+        // JSON string olarak gelir
         public string? ScenesJson { get; set; }
 
         [MaxLength(10)]

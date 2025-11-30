@@ -29,7 +29,7 @@ namespace Infrastructure.Configurations
             b.HasMany(r => r.StageExecutions)
              .WithOne(s => s.Run) // StageExecution tarafında "Run" adında prop olmalı
              .HasForeignKey(s => s.ContentPipelineRunId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
 
             // 2. User ve Template ilişkileri
             // Bunları zaten AppUserConfiguration ve TemplateConfiguration tarafında tanımlamıştık.

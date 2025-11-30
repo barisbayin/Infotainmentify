@@ -11,6 +11,7 @@ namespace Application.Services
         {
         }
 
+        // Filtreli Liste
         public async Task<IReadOnlyList<Script>> ListAsync(
             int userId,
             int? topicId,
@@ -24,7 +25,7 @@ namespace Application.Services
                     (string.IsNullOrWhiteSpace(q) || s.Title.Contains(q) || s.Content.Contains(q)),
                 orderBy: s => s.CreatedAt,
                 desc: true,
-                include: src => src.Include(s => s.Topic), // TopicTitle için Join
+                include: src => src.Include(s => s.Topic), // Join Topic
                 asNoTracking: true,
                 ct: ct
             );

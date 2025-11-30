@@ -18,7 +18,6 @@ namespace Application.Services
     public class AssetGenerationService
     {
         private readonly IRepository<ContentPipelineRun_> _pipelineRepo;
-        private readonly IRepository<AutoVideoAssetFile> _assetRepo;
         private readonly IRepository<Script> _scriptRepo;
         private readonly IRepository<AppUser> _appUserRepo;
         private readonly IUnitOfWork _uow;
@@ -28,7 +27,6 @@ namespace Application.Services
 
         public AssetGenerationService(
             IRepository<ContentPipelineRun_> pipelineRepo,
-            IRepository<AutoVideoAssetFile> assetRepo,
             IRepository<Script> scriptRepo,
             IUnitOfWork uow,
             IUserDirectoryService dir,
@@ -36,7 +34,6 @@ namespace Application.Services
             INotifierService notifier, IRepository<AppUser> appUserRepo)
         {
             _pipelineRepo = pipelineRepo;
-            _assetRepo = assetRepo;
             _scriptRepo = scriptRepo;
             _uow = uow;
             _dir = dir;
@@ -249,22 +246,22 @@ namespace Application.Services
           AutoVideoAssetFileType type,
           int scene,
           string path,
+
           string assetKey)
         {
-            await _assetRepo.AddAsync(new AutoVideoAssetFile
-            {
-                AppUserId = pipeline.AppUserId,
-                AutoVideoPipelineId = pipeline.Id,
-                SceneNumber = scene,
-                FileType = type,
-                FilePath = path,
-                AssetKey = assetKey,
-                IsGenerated = true,
-            });
+            //await _assetRepo.AddAsync(new AutoVideoAssetFile
+            //{
+            //    AppUserId = pipeline.AppUserId,
+            //    ContentPipelineRun = pipeline.Id,
+            //    SceneNumber = scene,
+            //    FileType = type,
+            //    FilePath = path,
+            //    AssetKey = assetKey,
+            //    IsGenerated = true,
+            //});
 
             await _uow.SaveChangesAsync();
         }
-
         private async Task Log(ContentPipelineRun_ p, string msg)
         {
             var logs = string.IsNullOrEmpty(p.LogJson)

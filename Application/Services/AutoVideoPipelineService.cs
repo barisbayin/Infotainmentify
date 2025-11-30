@@ -13,7 +13,6 @@ namespace Application.Services
     {
         private readonly IRepository<ContentPipelineRun_> _pipelineRepo;
         private readonly IRepository<VideoGenerationProfile> _profileRepo;
-        private readonly IRepository<AutoVideoAssetFile> _assetRepo;
         private readonly IRepository<AppUser> _userRepo;
         private readonly IUnitOfWork _uow;
         private readonly ICurrentUserService _current;
@@ -23,7 +22,6 @@ namespace Application.Services
         public AutoVideoPipelineService(
             IRepository<ContentPipelineRun_> pipelineRepo,
             IRepository<VideoGenerationProfile> profileRepo,
-            IRepository<AutoVideoAssetFile> assetRepo,
             IRepository<AppUser> userRepo,
             IUnitOfWork uow,
             ICurrentUserService current,
@@ -32,7 +30,6 @@ namespace Application.Services
         {
             _pipelineRepo = pipelineRepo;
             _profileRepo = profileRepo;
-            _assetRepo = assetRepo;
             _userRepo = userRepo;
             _uow = uow;
             _current = current;

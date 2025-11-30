@@ -55,6 +55,7 @@ namespace Application.Services
         /// </summary>
         public async Task<ScriptGenerationResult> GenerateFromProfileAsync(int profileId, CancellationToken ct)
         {
+            /*
             var userId = _current.UserId;
             var jobId = profileId; // job id olarak profile id kullanılabilir
 
@@ -215,6 +216,11 @@ namespace Application.Services
                 ProductionType = productionType,
                 RenderStyle = renderStyle
             };
+            */
+            return new ScriptGenerationResult
+            {
+               
+            };
         }
 
         /// <summary>
@@ -225,6 +231,7 @@ namespace Application.Services
             IReadOnlyList<int> topicIds,
             CancellationToken ct)
         {
+            /*
             var userId = _current.UserId;
             var jobId = profileId;
 
@@ -353,6 +360,9 @@ namespace Application.Services
                 ProductionType = productionType,
                 RenderStyle = renderStyle
             };
+            */
+
+            return new ScriptGenerationResult();
         }
 
         public async Task<Script> GenerateSingleAsync(
@@ -361,6 +371,8 @@ namespace Application.Services
     int? userId,
     CancellationToken ct)
         {
+
+            /*
             ct.ThrowIfCancellationRequested();
 
             userId ??= _current.UserId;
@@ -463,6 +475,10 @@ namespace Application.Services
             await _uow.SaveChangesAsync(ct);
 
             return script;
+
+            */
+
+            return new Script();
         }
     }
 }

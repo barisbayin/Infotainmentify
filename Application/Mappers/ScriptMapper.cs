@@ -10,8 +10,7 @@ namespace Application.Mappers
         {
             Id = e.Id,
             Title = e.Title,
-            // Topic null olabilir, kontrol et
-            TopicTitle = e.Topic?.Title,
+            TopicTitle = e.Topic?.Title ?? "-", // Topic include edilmezse null gelebilir
             EstimatedDurationSec = e.EstimatedDurationSec,
             CreatedAt = e.CreatedAt
         };

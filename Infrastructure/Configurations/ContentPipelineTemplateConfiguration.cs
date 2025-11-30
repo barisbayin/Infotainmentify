@@ -27,14 +27,14 @@ namespace Infrastructure.Configurations
             b.HasMany(t => t.StageConfigs)
              .WithOne(s => s.ContentPipelineTemplate)
              .HasForeignKey(s => s.ContentPipelineTemplateId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.NoAction);
 
             // 2. Template -> Runs (Üretim Geçmişi)
             // Template silinirse bu şablonla üretilen run kayıtları da silinsin.
             b.HasMany(t => t.Runs)
              .WithOne(r => r.Template)
              .HasForeignKey(r => r.TemplateId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

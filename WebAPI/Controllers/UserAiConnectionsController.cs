@@ -1,4 +1,5 @@
-﻿using Application.Contracts.UserAiConnection;
+﻿using Application.Contracts.AppUser;
+using Application.Extensions;
 using Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,56 +8,56 @@ namespace WebAPI.Controllers
 {
     [Authorize]
     [ApiController]
-    [Route("api/ai-integrations")]
-    public class UserAiConnectionsController : ControllerBase
+    [Route("api/ai-connections")]
+    public class AiConnectionsController : ControllerBase
     {
-        private readonly UserAiConnectionService _svc;
+        private readonly UserAiConnectionService _service;
 
-        public UserAiConnectionsController(UserAiConnectionService svc)
+        public AiConnectionsController(UserAiConnectionService service)
         {
-            _svc = svc;
+            _service = service;
         }
 
-        // GET: api/ai-integrations
         [HttpGet]
-        public async Task<ActionResult<IReadOnlyList<UserAiConnectionListDto>>> List(CancellationToken ct)
+        public async Task<IActionResult> List(CancellationToken ct)
         {
-            var list = await _svc.ListAsync(ct);
+            var list = await _service.ListAsync(User.GetUserId(), ct);
             return Ok(list);
         }
 
-        // GET: api/ai-integrations/{id}
-        [HttpGet("{id:int}")]
-        public async Task<ActionResult<UserAiConnectionDetailDto>> Get(int id, CancellationToken ct)
+        [HttpGet("{id}")]
+        public async Task<IActionResult> Get(int id, CancellationToken ct)
         {
-            var dto = await _svc.GetAsync(id, ct);
-            if (dto is null)
-                return NotFound();
-            return Ok(dto);
+            var dto = await _service.GetDetailAsync(id, User.GetUserId(), ct);
+            return dto is null ? NotFound() : Ok(dto);
         }
 
-        // POST: api/ai-integrations
         [HttpPost]
-        public async Task<ActionResult<int>> Create([FromBody] UserAiConnectionDetailDto dto, CancellationToken ct)
+        public async Task<IActionResult> Create([FromBody] SaveUserAiConnectionDto dto, CancellationToken ct)
         {
-            var id = await _svc.CreateAsync(dto, ct);
+            var id = await _service.CreateAsync(dto, User.GetUserId(), ct);
             return CreatedAtAction(nameof(Get), new { id }, new { id });
         }
 
-        // PUT: api/ai-integrations/{id}
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] UserAiConnectionDetailDto dto, CancellationToken ct)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] SaveUserAiConnectionDto dto, CancellationToken ct)
         {
-            await _svc.UpdateAsync(id, dto, ct);
+            await _service.UpdateAsync(id, dto, User.GetUserId(), ct);
             return NoContent();
         }
 
-        // DELETE: api/ai-integrations/{id}
-        [HttpDelete("{id:int}")]
+        [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
         {
-            await _svc.DeleteAsync(id, ct);
-            return NoContent();
+            try
+            {
+                await _service.DeleteAsync(id, User.GetUserId(), ct);
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return NotFound();
+            }
         }
     }
 }

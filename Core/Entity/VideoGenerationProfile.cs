@@ -32,7 +32,7 @@ namespace Core.Entity
         public int? SocialChannelId { get; set; }
 
         [ForeignKey(nameof(SocialChannelId))]
-        public UserSocialChannel? SocialChannel { get; set; }
+        public SocialChannel? SocialChannel { get; set; }
 
         public bool UploadAfterRender { get; set; } = true;
         public bool GenerateThumbnail { get; set; } = true;

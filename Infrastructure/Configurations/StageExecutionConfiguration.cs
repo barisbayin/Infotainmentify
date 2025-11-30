@@ -34,7 +34,7 @@ namespace Infrastructure.Configurations
             b.HasOne(se => se.Run)
              .WithMany(r => r.StageExecutions)
              .HasForeignKey(se => se.ContentPipelineRunId)
-             .OnDelete(DeleteBehavior.Cascade); // Run silinirse loglar da silinsin.
+             .OnDelete(DeleteBehavior.Restrict); // Run silinirse loglar da silinsin.
 
             // 2. StageConfig -> StageExecution
             // Config silinirse loglar silinsin mi? 
@@ -43,7 +43,7 @@ namespace Infrastructure.Configurations
             b.HasOne(se => se.StageConfig)
              .WithMany() // Config tarafında "Executions" listesi tutmadık (gerek yok)
              .HasForeignKey(se => se.StageConfigId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

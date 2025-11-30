@@ -10,7 +10,7 @@ namespace Application.Mappers
             Id = e.Id,
             Name = e.Name,
             Description = e.Description,
-            IsActive = e.IsActive
+            CreatedAt = e.CreatedAt
         };
 
         public static ConceptDetailDto ToDetailDto(this Concept e) => new()
@@ -18,7 +18,7 @@ namespace Application.Mappers
             Id = e.Id,
             Name = e.Name,
             Description = e.Description,
-            IsActive = e.IsActive
+            CreatedAt = e.CreatedAt
         };
     }
 }

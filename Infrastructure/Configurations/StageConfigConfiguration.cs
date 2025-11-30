@@ -30,7 +30,7 @@ namespace Infrastructure.Configurations
             b.HasOne(s => s.ContentPipelineTemplate)
              .WithMany(t => t.StageConfigs)
              .HasForeignKey(s => s.ContentPipelineTemplateId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

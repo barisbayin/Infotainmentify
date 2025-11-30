@@ -27,7 +27,7 @@ namespace Infrastructure.Configurations
             b.HasOne(x => x.AppUser)
              .WithMany() // User tarafında "TopicPresets" listesi tutmadık (Gerekirse ekleriz)
              .HasForeignKey(x => x.AppUserId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
 
             // 2. AiConnection -> TopicPresets
             // Eğer AI Connection silinirse, bu preset kullanılamaz hale gelir.

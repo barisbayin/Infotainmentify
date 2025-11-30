@@ -54,7 +54,7 @@ namespace Core.Entity
         public int? SocialChannelId { get; set; }
 
         [ForeignKey(nameof(SocialChannelId))]
-        public UserSocialChannel? SocialChannel { get; set; }
+        public SocialChannel? SocialChannel { get; set; }
 
         [MaxLength(200)]
         public string? UploadedVideoId { get; set; }

@@ -35,7 +35,7 @@ namespace Infrastructure.Configurations
             b.HasOne<AppUser>()
              .WithMany()
              .HasForeignKey(x => x.AppUserId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

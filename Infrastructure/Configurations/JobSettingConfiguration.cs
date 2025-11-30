@@ -30,7 +30,7 @@ namespace Infrastructure.Configurations
             builder.HasOne(x => x.User)
                    .WithMany()
                    .HasForeignKey(x => x.AppUserId)
-                   .OnDelete(DeleteBehavior.Cascade);
+                   .OnDelete(DeleteBehavior.Restrict);
 
             builder.Property(x => x.ProfileId)
                    .IsRequired();

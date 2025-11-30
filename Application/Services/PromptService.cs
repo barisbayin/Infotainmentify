@@ -16,7 +16,7 @@ namespace Application.Services
             int userId, string? q, string? category, bool? active, CancellationToken ct)
         {
             return await _repo.FindAsync(p =>
-                   p.UserId == userId &&
+                   p.AppUserId == userId &&
                    (string.IsNullOrWhiteSpace(q) ||
                         p.Name.Contains(q) ||
                         p.Body.Contains(q) ||
@@ -32,7 +32,7 @@ namespace Application.Services
             var name = dto.Name.Trim();
 
             // Kural: Aynı kullanıcının aynı isimde iki promptu olamaz
-            if (await _repo.AnyAsync(p => p.UserId == userId && p.Name == name, ct))
+            if (await _repo.AnyAsync(p => p.AppUserId == userId && p.Name == name, ct))
                 throw new InvalidOperationException("Bu isimde bir prompt zaten var.");
 
             var entity = new Prompt
@@ -65,7 +65,7 @@ namespace Application.Services
             // İsim değiştiyse unique kontrolü yap
             if (!string.Equals(entity.Name, name, StringComparison.OrdinalIgnoreCase))
             {
-                if (await _repo.AnyAsync(p => p.UserId == userId && p.Name == name && p.Id != id, ct))
+                if (await _repo.AnyAsync(p => p.AppUserId == userId && p.Name == name && p.Id != id, ct))
                     throw new InvalidOperationException("Bu isimde başka bir prompt zaten var.");
             }
 

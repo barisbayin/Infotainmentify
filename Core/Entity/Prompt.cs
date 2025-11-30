@@ -5,7 +5,7 @@ namespace Core.Entity
     public class Prompt : BaseEntity
     {
         // 👇 user bazlı sahiplik
-        public int UserId { get; set; }
+        public int AppUserId { get; set; }
 
         [Required, MaxLength(200)]
         public string Name { get; set; } = default!;

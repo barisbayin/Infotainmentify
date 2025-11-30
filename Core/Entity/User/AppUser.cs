@@ -37,7 +37,7 @@ namespace Core.Entity.User
 
         // 3. Kullanıcının Sosyal Medya Hesapları (Upload için)
         // Örn: YouTube Channel Token, TikTok Token
-        public ICollection<UserSocialChannel> SocialChannels { get; set; } = new List<UserSocialChannel>();
+        public ICollection<SocialChannel> SocialChannels { get; set; } = new List<SocialChannel>();
 
         // 4. Kullanıcının Video Projeleri (Geçmiş Run'lar)
         // Bunu direkt Run üzerinden sorgularız ama burada olması EF'te "Include" yaparken kolaylık sağlar.

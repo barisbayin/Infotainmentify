@@ -25,14 +25,14 @@ namespace Infrastructure.Configurations
             b.HasOne(x => x.AppUser)
              .WithMany()
              .HasForeignKey(x => x.AppUserId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
 
             // Topic silinirse Script de silinsin mi? 
             // Genelde EVET. Fikir giderse senaryo yetim kalır.
             b.HasOne(x => x.Topic)
              .WithMany() // Topic altında "Scripts" listesi tutmadık, gerekirse ekleriz.
              .HasForeignKey(x => x.TopicId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

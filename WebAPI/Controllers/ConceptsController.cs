@@ -1,5 +1,6 @@
 ﻿using Application.Contracts.Concept;
 using Application.Contracts.Mappers;
+using Application.Extensions;
 using Application.Mappers;
 using Application.Services;
 using Core.Abstractions;
@@ -13,61 +14,59 @@ namespace WebAPI.Controllers
     [Route("api/[controller]")]
     public class ConceptsController : ControllerBase
     {
-        private readonly ConceptService _svc;
-        private readonly ICurrentUserService _current;
+        private readonly ConceptService _service;
 
-        public ConceptsController(ConceptService svc, ICurrentUserService current)
+        public ConceptsController(ConceptService service)
         {
-            _svc = svc;
-            _current = current;
+            _service = service;
         }
 
-        // --------------------------
-        // LIST
-        // --------------------------
+        // GET: api/concepts
         [HttpGet]
-        public async Task<IActionResult> List(
-            [FromQuery] string? q,
-            [FromQuery] bool? active,
-            CancellationToken ct)
+        public async Task<IActionResult> List([FromQuery] string? q, CancellationToken ct)
         {
-            var list = await _svc.ListAsync(_current.UserId, q, active, ct);
+            var list = await _service.ListAsync(User.GetUserId(), q, ct);
+            // Mapper Extension kullanıyoruz
             return Ok(list.Select(x => x.ToListDto()));
         }
 
-        // --------------------------
-        // GET DETAIL
-        // --------------------------
-        [HttpGet("{id:int}")]
+        // GET: api/concepts/{id}
+        [HttpGet("{id}")]
         public async Task<IActionResult> Get(int id, CancellationToken ct)
         {
-            var e = await _svc.GetAsync(_current.UserId, id, ct);
-            return e is null ? NotFound() : Ok(e.ToDetailDto());
+            var entity = await _service.GetByIdAsync(id, User.GetUserId(), ct);
+            return entity is null ? NotFound() : Ok(entity.ToDetailDto());
         }
 
-        // --------------------------
-        // CREATE or UPDATE (Id == 0 => create)
-        // --------------------------
-        [HttpPost("save")]
-        public async Task<IActionResult> Save(
-            [FromBody] ConceptDetailDto dto,
-            CancellationToken ct)
+        // POST: api/concepts (SaveConceptDto kullanıyoruz)
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] SaveConceptDto dto, CancellationToken ct)
         {
-            var id = await _svc.UpsertAsync(_current.UserId, dto, ct);
-
-            if (dto.Id == 0)
-                return CreatedAtAction(nameof(Get), new { id }, new { id });
-
-            return Ok(new { id });
+            var id = await _service.CreateAsync(dto, User.GetUserId(), ct);
+            return CreatedAtAction(nameof(Get), new { id }, new { id });
         }
 
-        // --------------------------
-        // DELETE (soft)
-        // --------------------------
-        [HttpDelete("{id:int}")]
+        // PUT: api/concepts/{id} (Update için PUT şart)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] SaveConceptDto dto, CancellationToken ct)
+        {
+            await _service.UpdateAsync(id, dto, User.GetUserId(), ct);
+            return NoContent();
+        }
+
+        // DELETE: api/concepts/{id}
+        [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
-            => (await _svc.DeleteAsync(_current.UserId, id, ct))
-                ? NoContent()
-                : NotFound();
+        {
+            try
+            {
+                await _service.DeleteAsync(id, User.GetUserId(), ct);
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return NotFound();
+            }
+        }
     }
 }

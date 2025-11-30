@@ -1,4 +1,4 @@
-﻿using Application.Contracts.UserAiConnection;
+﻿using Application.Contracts.AppUser;
 using FluentValidation;
 
 namespace Application.Validators
@@ -8,7 +8,7 @@ namespace Application.Validators
         public UserAiConnectionValidator()
         {
             RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
-            RuleFor(x => x.Credentials).NotNull();
+            //RuleFor(x => x.Credentials).NotNull();
 
             // OAuth init: kaydı boş credential ile oluşturup "Connect" akışıyla tamamlayabiliriz.
             // Eğer doğrudan token verilecekse:

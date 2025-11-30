@@ -13,7 +13,7 @@ namespace Infrastructure.Configurations
 
             builder.ToTable("Prompts");
 
-            builder.Property(p => p.UserId)
+            builder.Property(p => p.AppUserId)
                     .IsRequired()
                     .HasColumnType("int");
 

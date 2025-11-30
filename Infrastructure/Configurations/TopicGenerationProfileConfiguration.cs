@@ -57,7 +57,7 @@ namespace Infrastructure.Configurations
             builder.HasOne(e => e.User)
                 .WithMany()
                 .HasForeignKey(e => e.AppUserId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             builder.HasOne(e => e.Prompt)
                 .WithMany()

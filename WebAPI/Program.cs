@@ -7,7 +7,10 @@ using Application.Executors;
 using Application.Extensions;
 using Application.Job;
 using Application.Options;
+using Application.Pipeline;
 using Application.Services;
+using Application.Services.Pipeline;
+using Application.Services.PresetService;
 using Application.SocialPlatform;
 using Core.Abstractions;
 using Core.Entity.User;
@@ -25,6 +28,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Quartz;
 using System.Reflection;
 using System.Text;
@@ -40,131 +44,126 @@ namespace WebAPI
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
-
-            builder.Services.AddControllers();
-
+            // =========================================================
+            // 1. DATABASE & CORE SERVICES
+            // =========================================================
             builder.Services.AddDbContext<AppDbContext>(opts =>
             {
                 opts.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
-                opts.AddInterceptors(new TimestampInterceptor());
+                // opts.AddInterceptors(new TimestampInterceptor()); // Eðer interceptor varsa aç
             });
 
             builder.Services.AddHttpClient();
+
+            // Infrastructure katmanýndaki repository vs. kayýtlarý
             builder.Services.AddInfrastructure(builder.Configuration);
+
+            // Quartz.NET (Zamanlanmýþ görevler için)
             builder.Services.AddAppQuartz();
 
+            // =========================================================
+            // 2. APPLICATION SERVICES (BUSINESS LOGIC)
+            // =========================================================
 
-
-            builder.Services.AddScoped<PromptService>();
-            builder.Services.AddScoped<TopicService>();
+            // --- Core Services ---
             builder.Services.AddScoped<AuthService>();
             builder.Services.AddScoped<AppUserService>();
-            builder.Services.AddScoped<UserAiConnectionService>();
-            builder.Services.AddScoped<UserSocialChannelService>();
-            builder.Services.AddScoped<TopicGenerationProfileService>();
-            builder.Services.AddScoped<JobSettingService>();
-            builder.Services.AddScoped<JobExecutionService>();
-            builder.Services.AddScoped<TopicGenerationService>();
-            builder.Services.AddScoped<ScriptGenerationService>();
+            builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+            builder.Services.AddScoped<IUserDirectoryService, UserDirectoryService>();
+
+            // --- Content Services (BaseService Türevleri) ---
+            builder.Services.AddScoped<ConceptService>();
+            builder.Services.AddScoped<PromptService>();
+            builder.Services.AddScoped<TopicService>();
             builder.Services.AddScoped<ScriptService>();
-            builder.Services.AddScoped<ScriptGenerationProfileService>();
-            builder.Services.AddScoped<JobExecutorFactory>();
-            builder.Services.AddScoped<BackgroundJobRunner>();
-            builder.Services.AddScoped<VideoAssetService>();
-            builder.Services.AddScoped<AssetGenerationService>();
-            builder.Services.AddScoped<VideoAssetService>();
-            builder.Services.AddScoped<AutoVideoPipelineService>();
-            builder.Services.AddScoped<UploadVideoService>();
-            builder.Services.AddScoped<YouTubeUploader>();
-            builder.Services.AddScoped<VideoGenerationProfileService>();
-            builder.Services.AddScoped<AutoVideoGenerationService>();
-            builder.Services.AddScoped<AutoVideoAssetFileService>();
-            builder.Services.AddScoped<RenderVideoService>();
-            builder.Services.AddScoped<RenderProfileService>();
+            builder.Services.AddScoped<UserAiConnectionService>();
+            builder.Services.AddScoped<SocialChannelService>();
 
-          
+            // --- Preset Services ---
+            builder.Services.AddScoped<TopicPresetService>();
+            builder.Services.AddScoped<ScriptPresetService>();
+            builder.Services.AddScoped<ImagePresetService>();
+            builder.Services.AddScoped<TtsPresetService>();
+            builder.Services.AddScoped<SttPresetService>();
+            builder.Services.AddScoped<RenderPresetService>();
+            builder.Services.AddScoped<VideoPresetService>();
 
-            builder.Services.AddSingleton<StageExecutorFactory>();
 
-            builder.Services.AddInfotainmentifyExecutors();
+            // --- Pipeline Engine ---
+            builder.Services.AddScoped<ContentPipelineRunner>(); // Orkestra Þefi
+            builder.Services.AddScoped<PipelineTemplateService>();
+
+            // =========================================================
+            // 3. AI & EXECUTOR LAYER (OTOMATÝK KAYIT)
+            // =========================================================
+
+            // Extension method ile tüm [AiProvider] servislerini kaydet
+            // (ServiceCollectionExtensions.cs dosyasýnda tanýmlamýþtýk)
             builder.Services.AddInfotainmentifyAiServices();
 
-            // Executors (transient olmalý)
-            //builder.Services.AddTransient<TopicStageExecutor>();
-            //builder.Services.AddTransient<ContentPlanStageExecutor>();
-            //builder.Services.AddTransient<ImageStageExecutor>();
-            //builder.Services.AddTransient<TtsStageExecutor>();
-            //builder.Services.AddTransient<VideoStageExecutor>();
-            //builder.Services.AddTransient<RenderStageExecutor>();
-            //builder.Services.AddTransient<UploadStageExecutor>();
+            // Extension method ile tüm [StageExecutor] sýnýflarýný kaydet
+            builder.Services.AddInfotainmentifyExecutors();
 
-            // Ýhtiyaç olursa
-            //builder.Services.AddTransient<VideoAIStageExecutor>();
-            //builder.Services.AddTransient<SttStageExecutor>();
-            //builder.Services.AddTransient<ImageVariationStageExecutor>();
-            //builder.Services.AddTransient<BRollStageExecutor>();
-            //builder.Services.AddTransient<VideoClipStageExecutor>();
-            //services.AddScoped<TikTokUploader>();
-            //services.AddScoped<InstagramUploader>();
-            //builder.Services.AddScoped<TopicGenerationService>();
-
-            builder.Services.AddHttpContextAccessor();
-            builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-            builder.Services.AddScoped<ICurrentJobContext , CurrentJobContext>();
-
-            // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-            builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
-
-            // FluentValidation (otomatik MVC entegrasyonu)
-            builder.Services.AddFluentValidationAutoValidation();
-            builder.Services.AddFluentValidationClientsideAdapters();
-            // Validator’larý tara (WebAPI projesindelerse):
-            builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
-
+            // =========================================================
+            // 4. API & SECURITY & VALIDATION
+            // =========================================================
             builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
             builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
-
             builder.Services.AddSingleton<IJwtTokenFactory, JwtTokenFactory>();
-            builder.Services.AddDataProtection(); // <-- bu DataProtection key ring'i hazýrlar
+
+            builder.Services.AddDataProtection();
             builder.Services.AddScoped<ISecretStore, DataProtectionSecretStore>();
-            builder.Services.AddSingleton<IUserDirectoryService, UserDirectoryService>();
 
-            builder.Services.AddScoped<IJobExecutor, TopicGenerationJobExecutor>();
-            builder.Services.AddScoped<IJobExecutor, ScriptGenerationJobExecutor>();
-            builder.Services.AddScoped<IJobExecutor, AutoVideoGenerationJobExecutor>();
-            builder.Services.AddScoped<ISocialUploaderFactory, SocialUploaderFactory>();
-
-            builder.Services.AddScoped<IFFmpegService, FFmpegService>();
-
-
-            //builder.Services.AddScoped<IJobExecutor, StoryGenerationJobExecutor>();
-
-            builder.Services.AddScoped<IAiGeneratorFactory, AiGeneratorFactory>();
-            //builder.Services.AddScoped<GeminiAiClient>();
-            //builder.Services.AddScoped<OpenAiClient>();
-
-            builder.Services.AddHttpClient<GeminiAiClient>(client =>
-            {
-                client.Timeout = TimeSpan.FromMinutes(2); // güvenli timeout
-            });
-
-            builder.Services.AddHttpClient<OpenAiClient>(client =>
-            {
-                client.Timeout = TimeSpan.FromMinutes(2);
-            });
-
-
+            // SignalR (Notifications)
             builder.Services.AddSignalR();
-            builder.Services.AddScoped<INotifierService, SignalRNotifierService>();
+            // builder.Services.AddScoped<INotifierService, SignalRNotifierService>();
 
+            // Controllers & JSON Config
             builder.Services.AddControllers()
-              .AddJsonOptions(o =>
-              {
-                  o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-              });
+                .AddJsonOptions(o =>
+                {
+                    o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+                });
 
+            // FluentValidation
+            builder.Services.AddFluentValidationAutoValidation();
+            builder.Services.AddFluentValidationClientsideAdapters();
+            // Application katmanýndaki validatorlarý bul
+            builder.Services.AddValidatorsFromAssemblyContaining<Application.Validators.SaveTopicValidator>();
+
+            // Swagger Config (JWT Destekli)
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "Infotainmentify API", Version = "v1" });
+
+                // Authorize butonu ekle
+                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+                    Name = "Authorization",
+                    In = ParameterLocation.Header,
+                    Type = SecuritySchemeType.ApiKey,
+                    Scheme = "Bearer"
+                });
+
+                c.AddSecurityRequirement(new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference = new OpenApiReference
+                            {
+                                Type = ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        new string[] {}
+                    }
+                });
+            });
+
+            // JWT Auth
             builder.Services
                 .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
@@ -181,15 +180,14 @@ namespace WebAPI
                             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
                     };
 
+                    // SignalR Auth Hook
                     options.Events = new JwtBearerEvents
                     {
                         OnMessageReceived = context =>
                         {
                             var accessToken = context.Request.Query["access_token"];
                             var path = context.HttpContext.Request.Path;
-
-                            if (!string.IsNullOrEmpty(accessToken) &&
-                                path.StartsWithSegments("/api/hubs/notify", StringComparison.OrdinalIgnoreCase))
+                            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/notify"))
                             {
                                 context.Token = accessToken;
                             }
@@ -198,76 +196,57 @@ namespace WebAPI
                     };
                 });
 
+            // CORS Config
             const string CorsPolicy = "InfotainmentifyCors";
-
             builder.Services.AddCors(options =>
             {
-                if (builder.Environment.IsDevelopment())
+                options.AddPolicy(CorsPolicy, policy =>
                 {
-                    // ?? Development ortamý (localhost)
-                    options.AddPolicy(CorsPolicy, policy =>
-                        policy.WithOrigins(
-                            "http://localhost:5173",
-                            "https://localhost:5173",
-                            "http://127.0.0.1:5173",
-                            "https://127.0.0.1:5173"
-                        )
-                        .AllowAnyMethod()
-                        .AllowAnyHeader()
-                        .AllowCredentials()
-                        .SetPreflightMaxAge(TimeSpan.FromHours(12))
-                    );
-                }
-                else
-                {
-                    // ?? Production ortamý (canlý)
-                    options.AddPolicy(CorsPolicy, policy =>
-                        policy.WithOrigins(
-                            "https://moduleer.com",           // frontend ana domain
-                            "https://www.moduleer.com"        // www varsa
-                                                              // ,"https://test.moduleer.com"    // staging varsa
-                        )
-                        .AllowAnyMethod()
-                        .AllowAnyHeader()
-                        .AllowCredentials()
-                        .SetPreflightMaxAge(TimeSpan.FromHours(12))
-                    );
-                }
+                    var origins = builder.Environment.IsDevelopment()
+                        ? new[] { "http://localhost:5173", "https://localhost:5173" }
+                        : new[] { "https://moduleer.com", "https://www.moduleer.com" };
+
+                    policy.WithOrigins(origins)
+                          .AllowAnyMethod()
+                          .AllowAnyHeader()
+                          .AllowCredentials()
+                          .SetPreflightMaxAge(TimeSpan.FromHours(1));
+                });
             });
 
-
-            //builder.Services.AddDataProtection().ProtectKeysWithCertificate("");
-
-
+            // =========================================================
+            // 5. BUILD & RUN
+            // =========================================================
             var app = builder.Build();
 
+            // Seed Data (Admin vs)
             using (var scope = app.Services.CreateScope())
             {
-                await Application.Job.JobBootstrapper.InitializeAsync(scope.ServiceProvider);
-            }
+                // Veritabaný yoksa oluþtur (Migration uygula)
+                // var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                // db.Database.Migrate();
 
-            using (var scope = app.Services.CreateScope())
-            {
+                // Admin Seed
                 var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();
                 await seeder.SeedAdminAsync();
             }
 
-            // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
 
+            app.UseHttpsRedirection();
 
-            app.UseRouting();
+            app.UseRouting(); // Sýralama önemli: Routing -> Cors -> Auth -> Endpoints
             app.UseCors(CorsPolicy);
+
             app.UseAuthentication();
             app.UseAuthorization();
-            app.UseWebSockets();
-            app.UseHttpsRedirection();
+
             app.MapControllers();
-            app.MapHub<NotifyHub>("/hubs/notify");
+            app.MapHub<NotifyHub>("/hubs/notify"); // Hub endpointi
 
             app.Run();
         }

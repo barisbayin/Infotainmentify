@@ -25,7 +25,7 @@ namespace Infrastructure.Configurations
             b.HasMany(c => c.Templates)
              .WithOne(t => t.Concept)
              .HasForeignKey(t => t.ConceptId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

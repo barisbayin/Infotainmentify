@@ -10,7 +10,6 @@ namespace Application.Services
     public class AutoVideoGenerationService
     {
         private readonly AutoVideoPipelineService _pipelineService;
-        private readonly AutoVideoAssetFileService _assetService;
         private readonly TopicGenerationService _topicGenerationService;
         private readonly ScriptGenerationService _scriptGenerationService;
         private readonly AssetGenerationService _assetGenerationService;
@@ -32,7 +31,6 @@ namespace Application.Services
 
         public AutoVideoGenerationService(
             AutoVideoPipelineService pipelineService,
-            AutoVideoAssetFileService assetService,
             TopicGenerationService topicGenerationService,
             ScriptGenerationService scriptGenerationService,
             AssetGenerationService assetGenerationService,
@@ -53,7 +51,6 @@ namespace Application.Services
             INotifierService notifier)
         {
             _pipelineService = pipelineService;
-            _assetService = assetService;
             _topicGenerationService = topicGenerationService;
             _scriptGenerationService = scriptGenerationService;
             _assetGenerationService = assetGenerationService;
@@ -88,48 +85,48 @@ namespace Application.Services
                 // ============================================================
                 // 1 — TOPIC
                 // ============================================================
-                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.SelectingTopic, ct);
+                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                 await _pipelineService.AddLogAsync(pipeline, "Topic seçimi başlatıldı.", ct);
 
                 await SelectTopicAsync(pipeline, ct);
 
-                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.TopicSelected, ct);
+                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                 await _pipelineService.AddLogAsync(pipeline, "Topic seçildi.", ct);
 
 
                 // ============================================================
                 // 2 — SCRIPT
                 // ============================================================
-                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.GeneratingScript, ct);
+                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                 await _pipelineService.AddLogAsync(pipeline, "Script üretimi başlatıldı.", ct);
 
                 await GenerateScriptAsync(pipeline, userId, ct);
 
-                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.ScriptGenerated, ct);
+                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                 await _pipelineService.AddLogAsync(pipeline, "Script üretildi.", ct);
 
 
                 // ============================================================
                 // 3 — ASSETS (images + tts)
                 // ============================================================
-                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.GeneratingAssets, ct);
+                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                 await _pipelineService.AddLogAsync(pipeline, "Asset üretimi başlatıldı.", ct);
 
                 await _assetGenerationService.GenerateAssetsAsync(pipeline.Id, ct);
 
-                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.AssetsGenerated, ct);
+                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                 await _pipelineService.AddLogAsync(pipeline, "Asset üretimi tamamlandı.", ct);
 
 
                 // ============================================================
                 // 4 — RENDER
                 // ============================================================
-                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Rendering, ct);
+                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                 await _pipelineService.AddLogAsync(pipeline, "Render işlemi başlatıldı.", ct);
 
                 await _renderService.RenderVideoAsync(pipeline.Id, ct);
 
-                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Rendered, ct);
+                await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                 await _pipelineService.AddLogAsync(pipeline, "Render tamamlandı.", ct);
 
 
@@ -138,12 +135,12 @@ namespace Application.Services
                 // ============================================================
                 if (pipeline.Profile.UploadAfterRender)
                 {
-                    await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Uploading, ct);
+                    await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                     await _pipelineService.AddLogAsync(pipeline, "Upload başlatıldı.", ct);
 
                     await UploadVideoAsync(pipeline, userId, ct);
 
-                    await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Uploaded, ct);
+                    await _pipelineService.UpdateStatusAsync(pipeline.Id, userId, ContentPipelineStatus.Pending, ct);
                     await _pipelineService.AddLogAsync(pipeline, "Video upload edildi.", ct);
                 }
                 else

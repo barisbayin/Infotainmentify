@@ -20,7 +20,7 @@ namespace Infrastructure.Configurations
             builder.HasOne(x => x.Job)
                    .WithMany()
                    .HasForeignKey(x => x.JobId)
-                   .OnDelete(DeleteBehavior.Cascade);
+                   .OnDelete(DeleteBehavior.Restrict);
 
             // Status enum
             builder.Property(x => x.Status)

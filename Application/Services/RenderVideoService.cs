@@ -16,7 +16,6 @@ namespace Application.Services
     {
         private readonly IFFmpegService _ffmpeg;
         private readonly IRepository<ContentPipelineRun_> _pipelineRepo;
-        private readonly IRepository<AutoVideoAssetFile> _assetFileRepo;
         private readonly IRepository<VideoGenerationProfile> _videoGenerationProfileRepo;
         private readonly IUserDirectoryService _dir;
         private readonly INotifierService _notifier;
@@ -26,7 +25,6 @@ namespace Application.Services
         public RenderVideoService(
             IFFmpegService ffmpeg,
             IRepository<ContentPipelineRun_> pipelineRepo,
-            IRepository<AutoVideoAssetFile> assetFileRepo,
             IRepository<VideoGenerationProfile> videoGenerationProfileRepo,
             IUserDirectoryService dir,
             INotifierService notifier,
@@ -35,7 +33,6 @@ namespace Application.Services
         {
             _ffmpeg = ffmpeg;
             _pipelineRepo = pipelineRepo;
-            _assetFileRepo = assetFileRepo;
             _videoGenerationProfileRepo = videoGenerationProfileRepo;
             _dir = dir;
             _notifier = notifier;

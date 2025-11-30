@@ -51,6 +51,7 @@ namespace Application.Services
         /// </summary>
         public async Task<string> GenerateFromProfileAsync(int profileId, CancellationToken ct)
         {
+            /*
             var userId = _current.UserId;
 
             var profile = await _profileRepo.GetByIdAsync(profileId, true, ct)
@@ -159,12 +160,13 @@ namespace Application.Services
                 // TODO: ScriptGenerationService entegrasyonu
                 // await _scriptService.GenerateForTopicsAsync(entities.Select(x => x.Id), ct);
             }
-
-            return $"{entities.Count} adet konu başarıyla üretildi.";
+            */
+            return $"{0} adet konu başarıyla üretildi.";
         }
 
         public async Task<Topic> GenerateSingleAsync(int topicProfileId, CancellationToken ct)
         {
+            /*
             var userId = _current.UserId;
 
             // Profil al
@@ -265,6 +267,9 @@ namespace Application.Services
             await _uow.SaveChangesAsync(ct);
 
             return topic;
+            */
+
+            return new Topic();
         }
     }
 }

@@ -1,130 +1,70 @@
 ﻿using Application.Contracts.Concept;
+using Application.Services.Base;
 using Core.Contracts;
 using Core.Entity.Pipeline;
 
 namespace Application.Services
 {
-    public class ConceptService
+    public class ConceptService : BaseService<Concept>
     {
-        private readonly IRepository<Concept> _repo;
-        private readonly IUnitOfWork _uow;
-
-        public ConceptService(IRepository<Concept> repo, IUnitOfWork uow)
+        public ConceptService(IRepository<Concept> repo, IUnitOfWork uow) : base(repo, uow)
         {
-            _repo = repo;
-            _uow = uow;
         }
 
-        // ------------------------------
-        // LIST
-        // ------------------------------
-        public Task<IReadOnlyList<Concept>> ListAsync(
-            int userId, string? q, bool? active, CancellationToken ct)
-            => _repo.FindAsync(
-                c =>
+        // LIST (Arama ve Filtreleme)
+        public async Task<IReadOnlyList<Concept>> ListAsync(
+            int userId, string? q, CancellationToken ct)
+        {
+            return await _repo.FindAsync(
+                predicate: c =>
                     c.AppUserId == userId &&
-                    (string.IsNullOrWhiteSpace(q) ||
-                        c.Name.Contains(q) ||
-                        (c.Description != null && c.Description.Contains(q))) &&
-                    (!active.HasValue || c.IsActive == active),
+                    (string.IsNullOrWhiteSpace(q) || c.Name.Contains(q) || (c.Description != null && c.Description.Contains(q))),
+                orderBy: c => c.CreatedAt,
+                desc: true,
                 asNoTracking: true,
-                ct: ct);
+                ct: ct
+            );
+        }
 
-
-        // ------------------------------
-        // GET
-        // ------------------------------
-        public Task<Concept?> GetAsync(int userId, int id, CancellationToken ct)
-            => _repo.FirstOrDefaultAsync(
-                c => c.AppUserId == userId && c.Id == id,
-                asNoTracking: true,
-                ct: ct);
-
-
-        // ------------------------------
-        // UPSERT (CREATE OR UPDATE)
-        // ------------------------------
-        public async Task<int> UpsertAsync(int userId, ConceptDetailDto dto, CancellationToken ct)
+        // CREATE
+        public async Task<int> CreateAsync(SaveConceptDto dto, int userId, CancellationToken ct)
         {
             var name = dto.Name.Trim();
 
-            // ----------------------
-            // CREATE
-            // ----------------------
-            if (dto.Id == 0)
+            // Aynı isimde konsept var mı?
+            if (await _repo.AnyAsync(c => c.AppUserId == userId && c.Name == name, ct))
+                throw new InvalidOperationException("Bu isimde bir konsept zaten var.");
+
+            var entity = new Concept
             {
-                // UNIQUE CHECK: (AppUserId, Name)
-                var exists = await _repo.AnyAsync(
-                    c => c.AppUserId == userId && c.Name == name,
-                    ct);
+                Name = name,
+                Description = dto.Description
+                // AppUserId BaseService tarafından set edilecek
+            };
 
-                if (exists)
-                    throw new InvalidOperationException("Bu isimde bir konsept zaten mevcut.");
-
-                var e = new Concept
-                {
-                    AppUserId = userId,
-                    Name = name,
-                    Description = dto.Description?.Trim(),
-                    IsActive = dto.IsActive
-                };
-
-                await _repo.AddAsync(e, ct);
-                await _uow.SaveChangesAsync(ct);
-                return e.Id;
-            }
-
-            // ----------------------
-            // UPDATE
-            // ----------------------
-            else
-            {
-                var e = await _repo.FirstOrDefaultAsync(
-                    c => c.AppUserId == userId && c.Id == dto.Id,
-                    asNoTracking: false,
-                    ct: ct);
-
-                if (e is null)
-                    throw new KeyNotFoundException("Konsept bulunamadı.");
-
-                // Name değiştiyse UNIQUE kontrol
-                if (!string.Equals(e.Name, name, StringComparison.Ordinal))
-                {
-                    var clash = await _repo.AnyAsync(
-                        c => c.AppUserId == userId && c.Name == name && c.Id != dto.Id,
-                        ct);
-
-                    if (clash)
-                        throw new InvalidOperationException("Bu isimde başka bir konsept var.");
-                }
-
-                e.Name = name;
-                e.Description = dto.Description?.Trim();
-                e.IsActive = dto.IsActive;
-
-                _repo.Update(e);
-                await _uow.SaveChangesAsync(ct);
-                return e.Id;
-            }
+            await base.AddAsync(entity, userId, ct);
+            return entity.Id;
         }
 
-
-        // ------------------------------
-        // DELETE (Soft Delete)
-        // ------------------------------
-        public async Task<bool> DeleteAsync(int userId, int id, CancellationToken ct)
+        // UPDATE
+        public async Task UpdateAsync(int id, SaveConceptDto dto, int userId, CancellationToken ct)
         {
-            var e = await _repo.FirstOrDefaultAsync(
-                c => c.AppUserId == userId && c.Id == id,
-                asNoTracking: false,
-                ct: ct);
+            var entity = await base.GetByIdAsync(id, userId, ct);
+            if (entity == null) throw new KeyNotFoundException("Konsept bulunamadı.");
 
-            if (e is null)
-                return false;
+            var name = dto.Name.Trim();
 
-            _repo.Delete(e); // Soft delete → Stamp() hallediyor
-            await _uow.SaveChangesAsync(ct);
-            return true;
+            // İsim değiştiyse unique kontrolü
+            if (!string.Equals(entity.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                if (await _repo.AnyAsync(c => c.AppUserId == userId && c.Name == name && c.Id != id, ct))
+                    throw new InvalidOperationException("Bu isimde başka bir konsept zaten var.");
+            }
+
+            entity.Name = name;
+            entity.Description = dto.Description;
+
+            await base.UpdateAsync(entity, userId, ct);
         }
     }
 }
