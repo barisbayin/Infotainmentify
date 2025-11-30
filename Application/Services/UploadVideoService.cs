@@ -3,6 +3,7 @@ using Application.Contracts.Script;
 using Core.Abstractions;
 using Core.Contracts;
 using Core.Entity;
+using Core.Entity.User;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -11,7 +12,7 @@ namespace Application.Services
 {
     public class UploadVideoService
     {
-        private readonly IRepository<ContentPipelineRun> _pipelineRepo;
+        private readonly IRepository<ContentPipelineRun_> _pipelineRepo;
         private readonly IRepository<UserSocialChannel> _channelRepo;
         private readonly ISocialUploaderFactory _uploaderFactory;
         private readonly ISecretStore _secret;
@@ -20,7 +21,7 @@ namespace Application.Services
         private readonly ICurrentUserService _current;
 
         public UploadVideoService(
-            IRepository<ContentPipelineRun> pipelineRepo,
+            IRepository<ContentPipelineRun_> pipelineRepo,
             IRepository<UserSocialChannel> channelRepo,
             ISocialUploaderFactory uploaderFactory,
             ISecretStore secret,

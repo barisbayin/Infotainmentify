@@ -2,8 +2,9 @@
 {
     public enum CaptionPositionTypes
     {
-        Top = 1,
-        Middle = 2,
-        Bottom = 3
+        Top = 0,
+        Center = 1,
+        Bottom = 2,
+        Custom = 99
     }
 }

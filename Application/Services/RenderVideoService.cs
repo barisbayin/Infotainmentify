@@ -3,6 +3,7 @@ using Application.Contracts.Script;
 using Application.Models;
 using Core.Contracts;
 using Core.Entity;
+using Core.Entity.User;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
@@ -14,7 +15,7 @@ namespace Application.Services
     public class RenderVideoService
     {
         private readonly IFFmpegService _ffmpeg;
-        private readonly IRepository<ContentPipelineRun> _pipelineRepo;
+        private readonly IRepository<ContentPipelineRun_> _pipelineRepo;
         private readonly IRepository<AutoVideoAssetFile> _assetFileRepo;
         private readonly IRepository<VideoGenerationProfile> _videoGenerationProfileRepo;
         private readonly IUserDirectoryService _dir;
@@ -24,7 +25,7 @@ namespace Application.Services
 
         public RenderVideoService(
             IFFmpegService ffmpeg,
-            IRepository<ContentPipelineRun> pipelineRepo,
+            IRepository<ContentPipelineRun_> pipelineRepo,
             IRepository<AutoVideoAssetFile> assetFileRepo,
             IRepository<VideoGenerationProfile> videoGenerationProfileRepo,
             IUserDirectoryService dir,
@@ -136,7 +137,7 @@ namespace Application.Services
             // UPDATE DB
             // ---------------------------------------
             pipeline.VideoPath = finalFile.Replace("\\", "/");
-            pipeline.Status = ContentPipelineStatus.Rendered;
+            //pipeline.Status = ContentPipelineStatus.Rendered;
 
             await _uow.SaveChangesAsync(ct);
 
@@ -223,7 +224,7 @@ namespace Application.Services
             int align = p.CaptionPosition switch
             {
                 CaptionPositionTypes.Top => 8,
-                CaptionPositionTypes.Middle => 5,
+                CaptionPositionTypes.Center => 5,
                 CaptionPositionTypes.Bottom => 2,
                 _ => 2
             };

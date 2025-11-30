@@ -4,76 +4,35 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Infrastructure.Configurations
 {
-    public class ScriptConfiguration : BaseEntityConfiguration<Script>
+    public sealed class ScriptConfiguration : BaseEntityConfiguration<Script>, IEntityTypeConfiguration<Script>
     {
-        public override void Configure(EntityTypeBuilder<Script> builder)
+        public override void Configure(EntityTypeBuilder<Script> b)
         {
-            base.Configure(builder);
-            builder.ToTable("Scripts");
+            base.Configure(b);
+            b.ToTable("Scripts");
 
-            // 🔹 Temel alanlar
-            builder.Property(e => e.Title)
-                .HasMaxLength(200)
-                .IsRequired();
+            b.HasIndex(x => x.AppUserId);
+            b.HasIndex(x => x.TopicId);
 
-            builder.Property(e => e.Content)
-                .IsRequired();
+            b.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Content).IsRequired(); // NVARCHAR(MAX)
+            b.Property(x => x.LanguageCode).HasMaxLength(10).IsRequired();
 
-            builder.Property(e => e.Summary)
-                .HasMaxLength(200);
+            // JSON alanı
+            b.Property(x => x.ScenesJson).IsRequired(false);
 
-            builder.Property(e => e.Language)
-                .HasMaxLength(50);
+            // İlişkiler
+            b.HasOne(x => x.AppUser)
+             .WithMany()
+             .HasForeignKey(x => x.AppUserId)
+             .OnDelete(DeleteBehavior.Cascade);
 
-            builder.Property(e => e.RenderStyle)
-                .HasMaxLength(50);
-
-            builder.Property(e => e.ProductionType)
-                .HasMaxLength(50);
-
-            // 🔹 JSON alanları
-            builder.Property(e => e.MetaJson)
-                .HasColumnType("nvarchar(max)");
-
-            builder.Property(e => e.ScriptJson)
-                .HasColumnType("nvarchar(max)");
-
-            // 🔹 İlişkiler
-            builder.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.NoAction);
-
-            builder.HasOne(e => e.Topic)
-                .WithMany()
-                .HasForeignKey(e => e.TopicId)
-                .OnDelete(DeleteBehavior.NoAction);
-
-            builder.HasOne(e => e.Prompt)
-                .WithMany()
-                .HasForeignKey(e => e.PromptId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            builder.HasOne(e => e.AiConnection)
-                .WithMany()
-                .HasForeignKey(e => e.AiConnectionId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            builder.HasOne(e => e.ScriptGenerationProfile)
-                .WithMany()
-                .HasForeignKey(e => e.ScriptGenerationProfileId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            // 🔹 Performans ölçüm alanı
-            builder.Property(e => e.ResponseTimeMs)
-                .HasColumnType("int");
-
-            // 🔹 Indexler
-            builder.HasIndex(e => e.TopicId);
-            builder.HasIndex(e => e.UserId);
-            builder.HasIndex(e => e.PromptId);
-            builder.HasIndex(e => e.AiConnectionId);
-            builder.HasIndex(e => e.ScriptGenerationProfileId);
+            // Topic silinirse Script de silinsin mi? 
+            // Genelde EVET. Fikir giderse senaryo yetim kalır.
+            b.HasOne(x => x.Topic)
+             .WithMany() // Topic altında "Scripts" listesi tutmadık, gerekirse ekleriz.
+             .HasForeignKey(x => x.TopicId)
+             .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

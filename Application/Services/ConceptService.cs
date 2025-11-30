@@ -1,6 +1,6 @@
 ﻿using Application.Contracts.Concept;
 using Core.Contracts;
-using Core.Entity;
+using Core.Entity.Pipeline;
 
 namespace Application.Services
 {

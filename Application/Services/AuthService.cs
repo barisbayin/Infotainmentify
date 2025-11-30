@@ -1,6 +1,6 @@
 ﻿using Application.Abstractions;
 using Core.Contracts;
-using Core.Entity;
+using Core.Entity.User;
 using Core.Enums;
 using Core.Security;
 using Microsoft.AspNetCore.Identity;

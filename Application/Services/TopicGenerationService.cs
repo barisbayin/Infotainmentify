@@ -1,9 +1,10 @@
 ﻿using Application.Abstractions;
-using Application.AiLayer;
+using Application.AiLayer.Abstract;
 using Application.Models;
 using Core.Abstractions;
 using Core.Contracts;
 using Core.Entity;
+using Core.Entity.User;
 using System.Text.Json;
 
 namespace Application.Services

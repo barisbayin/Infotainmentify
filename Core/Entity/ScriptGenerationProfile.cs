@@ -1,4 +1,5 @@
 ﻿using Core.Abstractions;
+using Core.Entity.User;
 using Core.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;

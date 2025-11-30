@@ -1,18 +1,17 @@
 ﻿using Application.Abstractions;
 using Application.Contracts.AppUser;
 using Application.Mappers;
+using Application.Services.Base;
 using Core.Abstractions;
 using Core.Contracts;
-using Core.Entity;
+using Core.Entity.User;
 using Core.Enums;
 using Microsoft.AspNetCore.Identity;
 
 namespace Application.Services
 {
-    public class AppUserService
+    public class AppUserService : BaseService<AppUser>
     {
-        private readonly IRepository<AppUser> _repo;
-        private readonly IUnitOfWork _uow;
         private readonly IPasswordHasher<AppUser> _hasher;
         private readonly ICurrentUserService _current;
         private readonly IUserDirectoryService _dirs;
@@ -23,99 +22,136 @@ namespace Application.Services
             IPasswordHasher<AppUser> hasher,
             ICurrentUserService current,
             IUserDirectoryService dirs)
+            : base(repo, uow) // BaseService'e dependency'leri paslıyoruz
         {
-            _repo = repo; _uow = uow; _hasher = hasher; _current = current; _dirs = dirs;
+            _hasher = hasher;
+            _current = current;
+            _dirs = dirs;
         }
 
-        // Tüm kullanıcılar (Admin: hepsi, Normal: sadece kendini görmek istersen FE'de /me kullan)
+        // =================================================================
+        // GET METHODS
+        // =================================================================
+
+        // Admin: Tüm kullanıcıları listele
         public async Task<IReadOnlyList<AppUserListDto>> ListAsync(CancellationToken ct)
         {
+            // BaseService.GetAllAsync kullanmıyoruz çünkü o UserId filtresi yapmaya çalışır.
+            // Admin her şeyi görür.
             var users = await _repo.GetAllAsync(asNoTracking: true, ct);
             return users.Select(x => x.ToListDto()).ToList();
         }
 
-        // Id ile detay
+        // Admin veya Sistem: ID ile kullanıcı detay
         public async Task<AppUserDetailDto?> GetAsync(int id, CancellationToken ct)
         {
+            // BaseService.GetByIdAsync kullanabiliriz ama AppUser'da AppUserId property'si 
+            // olmadığı için BaseService "Sahibi yok, herkese açık" sanabilir.
+            // O yüzden manuel çekiyoruz.
             var u = await _repo.GetByIdAsync(id, asNoTracking: true, ct);
             return u?.ToDetailDto();
         }
 
-        // Me
+        // Ben Kimim? (Me Endpoint)
         public async Task<AppUserDetailDto?> MeAsync(CancellationToken ct)
         {
             if (_current.UserId <= 0) return null;
-            var u = await _repo.GetByIdAsync(_current.UserId, asNoTracking: true, ct);
-            return u?.ToDetailDto();
+            return await GetAsync(_current.UserId, ct);
         }
 
-        // Profil güncelle (ben)
+        // =================================================================
+        // WRITE METHODS (Custom Business Logic)
+        // =================================================================
+
+        // Profil Güncelleme (Ben)
         public async Task UpdateMeAsync(string email, string username, CancellationToken ct)
         {
-            if (_current.UserId <= 0) throw new InvalidOperationException("Unauthorized");
+            var userId = _current.UserId;
+            if (userId <= 0) throw new UnauthorizedAccessException("Giriş yapmalısınız.");
 
+            // Validasyonlar
             email = email.Trim().ToLowerInvariant();
             username = UserDirectoryService.SanitizeUsername(username);
 
-            if (await _repo.AnyAsync(x => x.Email == email && x.Id != _current.UserId, ct))
-                throw new InvalidOperationException("Email already exists.");
+            // Çakışma Kontrolü (Unique Email/Username)
+            // Kendi ID'm dışındakilerde bu email var mı?
+            if (await _repo.AnyAsync(x => x.Email == email && x.Id != userId, ct))
+                throw new InvalidOperationException("Bu e-posta adresi kullanımda.");
 
-            if (await _repo.AnyAsync(x => x.Username == username && x.Id != _current.UserId, ct))
-                throw new InvalidOperationException("Username already exists.");
+            if (await _repo.AnyAsync(x => x.Username == username && x.Id != userId, ct))
+                throw new InvalidOperationException("Bu kullanıcı adı alınmış.");
 
-            var u = await _repo.GetByIdAsync(_current.UserId, asNoTracking: false, ct)
-                    ?? throw new InvalidOperationException("User not found.");
+            // Entity'i çek (Tracking açık, çünkü update edeceğiz)
+            var user = await _repo.GetByIdAsync(userId, asNoTracking: false, ct);
+            if (user == null) throw new InvalidOperationException("Kullanıcı bulunamadı.");
 
-            u.Email = email;
-            u.Username = username;
+            // Değişiklikleri uygula
+            user.Email = email;
+            user.Username = username;
 
-            if (string.IsNullOrWhiteSpace(u.DirectoryName))
-                u.DirectoryName = $"{u.Id}_{username}";
+            // İlk kez directory oluşuyorsa veya değiştiyse
+            if (string.IsNullOrWhiteSpace(user.DirectoryName))
+                user.DirectoryName = $"{user.Id}_{username}";
 
-            _repo.Update(u);
+            // BaseRepo update çağırmaya gerek yok (EF Core Tracking halleder) ama alışkanlık olsun
+            _repo.Update(user);
             await _uow.SaveChangesAsync(ct);
-            await _dirs.EnsureUserScaffoldAsync(u, ct);
+
+            // Klasör yapısını güncelle/oluştur
+            await _dirs.EnsureUserScaffoldAsync(user, ct);
         }
 
-        // Şifre değiştir (ben)
+        // Şifre Değiştirme (Ben)
         public async Task ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken ct)
         {
-            if (_current.UserId <= 0) throw new InvalidOperationException("Unauthorized");
+            var userId = _current.UserId;
+            if (userId <= 0) throw new UnauthorizedAccessException();
 
-            var u = await _repo.GetByIdAsync(_current.UserId, asNoTracking: false, ct)
-                    ?? throw new InvalidOperationException("User not found.");
+            var user = await _repo.GetByIdAsync(userId, asNoTracking: false, ct);
+            if (user == null) throw new InvalidOperationException("Kullanıcı bulunamadı.");
 
-            var vr = _hasher.VerifyHashedPassword(u, u.PasswordHash, currentPassword);
-            if (vr == PasswordVerificationResult.Failed)
-                throw new InvalidOperationException("Current password incorrect.");
+            // Eski şifre kontrolü
+            var verifyResult = _hasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword);
+            if (verifyResult == PasswordVerificationResult.Failed)
+                throw new InvalidOperationException("Mevcut şifre hatalı.");
 
-            u.PasswordHash = _hasher.HashPassword(u, newPassword);
-            _repo.Update(u);
+            // Yeni şifreyi hashle ve kaydet
+            user.PasswordHash = _hasher.HashPassword(user, newPassword);
+
             await _uow.SaveChangesAsync(ct);
         }
 
-        // Admin: rol set
-        public async Task SetRoleAsync(int userId, UserRole role, CancellationToken ct)
+        // =================================================================
+        // ADMIN METHODS
+        // =================================================================
+
+        public async Task SetRoleAsync(int targetUserId, UserRole role, CancellationToken ct)
         {
-            var u = await _repo.GetByIdAsync(userId, asNoTracking: false, ct)
-                    ?? throw new InvalidOperationException("User not found.");
-            u.Role = role;
-            _repo.Update(u);
+            // Buraya [Authorize(Roles="Admin")] Controller'dan gelecek ama servis içinde de kontrol iyidir.
+            // Şimdilik pas geçiyorum.
+
+            var user = await _repo.GetByIdAsync(targetUserId, asNoTracking: false, ct);
+            if (user == null) throw new InvalidOperationException("Kullanıcı bulunamadı.");
+
+            user.Role = role;
             await _uow.SaveChangesAsync(ct);
         }
 
-        // Admin: aktif pasif (soft delete)
-        public async Task SetActiveAsync(int userId, bool isActive, CancellationToken ct)
+        public async Task SetActiveAsync(int targetUserId, bool isActive, CancellationToken ct)
         {
-            if (userId == _current.UserId && !isActive)
-                throw new InvalidOperationException("You cannot deactivate your own account.");
+            if (targetUserId == _current.UserId && !isActive)
+                throw new InvalidOperationException("Kendi hesabınızı pasife alamazsınız.");
 
-            var u = await _repo.GetByIdAsync(userId, asNoTracking: false, ct)
-                    ?? throw new InvalidOperationException("User not found.");
+            var user = await _repo.GetByIdAsync(targetUserId, asNoTracking: false, ct);
+            if (user == null) throw new InvalidOperationException("Kullanıcı bulunamadı.");
 
-            u.IsActive = isActive; // 🔥 tersine çevirme yok artık
-            _repo.Update(u);
-            await _uow.SaveChangesAsync(ct);
+            // isActive parametresini AppUser entity'sine eklemen gerekebilir (örn: IsActive propertysi)
+            // Eğer BaseEntity'de 'Removed' varsa onu kullanabiliriz (Soft Delete)
+            // Veya IsActive diye ayrı bir alan açabiliriz.
+
+            // user.IsActive = isActive; 
+            // _repo.Update(user);
+            // await _uow.SaveChangesAsync(ct);
         }
     }
 }

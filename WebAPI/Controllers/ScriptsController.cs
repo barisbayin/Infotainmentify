@@ -1,6 +1,9 @@
 ﻿using Application.Contracts.Script;
+using Application.Contracts.Story;
+using Application.Extensions;
+using Application.Mappers;
 using Application.Services;
-using Core.Abstractions;
+using Core.Entity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,73 +15,79 @@ namespace WebAPI.Controllers
     public class ScriptsController : ControllerBase
     {
         private readonly ScriptService _svc;
-        private readonly ICurrentUserService _current;
 
-        public ScriptsController(ScriptService svc, ICurrentUserService current)
+        public ScriptsController(ScriptService svc)
         {
             _svc = svc;
-            _current = current;
         }
 
-        // ---------------- LIST ----------------
-        /// <summary>
-        /// Kullanıcının script listesini döner (isteğe göre topicId ve arama filtresi uygulanır)
-        /// </summary>
+        // GET: api/scripts?topicId=5&q=hello
         [HttpGet]
-        public async Task<IActionResult> List(
+        public async Task<ActionResult<IEnumerable<ScriptListDto>>> List(
             [FromQuery] int? topicId,
             [FromQuery] string? q,
             CancellationToken ct)
         {
-            var list = await _svc.ListAsync(topicId, q, ct);
-            return Ok(list);
+            var list = await _svc.ListAsync(User.GetUserId(), topicId, q, ct);
+            return Ok(list.Select(x => x.ToListDto()));
         }
 
-        // ---------------- GET ----------------
-        /// <summary>
-        /// Belirli bir script detayını döner
-        /// </summary>
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult> Get(int id, CancellationToken ct)
+        [HttpGet("{id}")]
+        public async Task<ActionResult<ScriptDetailDto>> Get(int id, CancellationToken ct)
         {
-            var dto = await _svc.GetAsync(id, ct);
-            if (dto == null)
-                return NotFound(new { message = "Script bulunamadı." });
-
-            return Ok(dto);
+            var e = await _svc.GetByIdAsync(id, User.GetUserId(), ct);
+            return e is null ? NotFound() : Ok(e.ToDetailDto());
         }
 
-        // ---------------- CREATE ----------------
-        /// <summary>
-        /// Yeni bir script oluşturur
-        /// </summary>
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] ScriptDetailDto dto, CancellationToken ct)
+        public async Task<IActionResult> Create([FromBody] SaveScriptDto dto, CancellationToken ct)
         {
-            var created = await _svc.CreateAsync(dto, ct);
-            return Ok(created);
+            var entity = new Script
+            {
+                TopicId = dto.TopicId,
+                Title = dto.Title,
+                Content = dto.Content,
+                ScenesJson = dto.ScenesJson,
+                LanguageCode = dto.LanguageCode,
+                EstimatedDurationSec = dto.EstimatedDurationSec
+                // AppUserId service içinde set edilir
+            };
+
+            await _svc.AddAsync(entity, User.GetUserId(), ct);
+            return CreatedAtAction(nameof(Get), new { id = entity.Id }, new { id = entity.Id });
         }
 
-        // ---------------- UPDATE ----------------
-        /// <summary>
-        /// Script günceller
-        /// </summary>
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] ScriptDetailDto dto, CancellationToken ct)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] SaveScriptDto dto, CancellationToken ct)
         {
-            var updated = await _svc.UpdateAsync(id, dto, ct);
-            return Ok(updated);
+            var userId = User.GetUserId();
+            var entity = await _svc.GetByIdAsync(id, userId, ct);
+            if (entity == null) return NotFound();
+
+            // Update
+            entity.TopicId = dto.TopicId; // Topic değişebilir mi? Evet.
+            entity.Title = dto.Title;
+            entity.Content = dto.Content;
+            entity.ScenesJson = dto.ScenesJson;
+            entity.LanguageCode = dto.LanguageCode;
+            entity.EstimatedDurationSec = dto.EstimatedDurationSec;
+
+            await _svc.UpdateAsync(entity, userId, ct);
+            return NoContent();
         }
 
-        // ---------------- DELETE ----------------
-        /// <summary>
-        /// Script siler
-        /// </summary>
-        [HttpDelete("{id:int}")]
+        [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
         {
-            await _svc.DeleteAsync(id, ct);
-            return NoContent();
+            try
+            {
+                await _svc.DeleteAsync(id, User.GetUserId(), ct);
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return NotFound();
+            }
         }
     }
 }

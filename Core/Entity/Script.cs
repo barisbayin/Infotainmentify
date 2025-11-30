@@ -1,67 +1,47 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using Core.Entity.User;
+using System.ComponentModel.DataAnnotations;
 
 namespace Core.Entity
 {
-    /// <summary>
-    /// Script = Topic'ten türetilmiş AI destekli veya manuel oluşturulmuş senaryo/metin içeriği.
-    /// </summary>
     public class Script : BaseEntity
     {
-        // 👤 Kullanıcıya aitlik
         [Required]
-        public int UserId { get; set; }
+        public int AppUserId { get; set; }
+        public AppUser AppUser { get; set; } = null!;
 
-        // 🧩 Bağlı olduğu Topic
-        [Required]
-        public int TopicId { get; set; }
+        // --------------------------------------------------------
+        // BAĞLANTILAR
+        // --------------------------------------------------------
 
-        // 🔗 Hangi üretim profiliyle oluşturuldu
-        public int? ScriptGenerationProfileId { get; set; }
-        [ForeignKey(nameof(ScriptGenerationProfileId))]
-        public ScriptGenerationProfile? ScriptGenerationProfile { get; set; }
+        // Hangi Topic'ten türetildi? (Opsiyonel olabilir, manuel de yazılabilir)
+        public int? TopicId { get; set; }
+        public Topic? Topic { get; set; }
 
-        // 🤖 AI kaynak bilgisi
-        public int? AiConnectionId { get; set; }
-        [ForeignKey(nameof(AiConnectionId))]
-        public UserAiConnection? AiConnection { get; set; }
+        // Hangi Pipeline/Run üretti? (Audit)
+        public int? CreatedByRunId { get; set; }
 
-        public int? PromptId { get; set; }
-        [ForeignKey(nameof(PromptId))]
-        public Prompt? Prompt { get; set; }
+        // Hangi Preset kullanıldı?
+        public int? SourcePresetId { get; set; }
 
-        // 📜 İçerik alanları
-        [MaxLength(200)]
+        // --------------------------------------------------------
+        // İÇERİK
+        // --------------------------------------------------------
+
+        [Required, MaxLength(200)]
         public string Title { get; set; } = default!;
 
+        // Düz metin hali (Okumak için)
         [Required]
         public string Content { get; set; } = default!;
 
-        [MaxLength(200)]
-        public string? Summary { get; set; }
+        // ⚠️ KRİTİK: Video üretimi için sahneleme yapısı
+        // JSON: [{ "scene": 1, "visualPrompt": "...", "audioText": "..." }, ...]
+        public string? ScenesJson { get; set; }
 
-        [MaxLength(50)]
-        public string? Language { get; set; }
+        [MaxLength(10)]
+        public string LanguageCode { get; set; } = "tr-TR";
 
-        // 🎨 Üretim stili bilgileri
-        [MaxLength(50)]
-        public string? RenderStyle { get; set; }
-
-        [MaxLength(50)]
-        public string? ProductionType { get; set; }
-
-        // 🎛️ AI metadata: model adı, sıcaklık, response time vs.
-        [Column(TypeName = "nvarchar(max)")]
-        public string? MetaJson { get; set; }
-
-        [Column(TypeName = "nvarchar(max)")]
-        public string? ScriptJson { get; set; }
-
-        // 🧠 İstatistik / durum bilgileri
-        public int? ResponseTimeMs { get; set; }
-
-        // 🔗 Navigation
-        public virtual Topic Topic { get; set; } = default!;
-        public virtual AppUser User { get; set; } = default!;
+        // Tahmini okuma/izleme süresi (Saniye)
+        public int EstimatedDurationSec { get; set; }
     }
 }

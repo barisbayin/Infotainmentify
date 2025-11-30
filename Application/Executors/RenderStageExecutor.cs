@@ -1,13 +1,15 @@
 ﻿using Application.Abstractions;
-using Core.Entity;
+using Application.Models;
+using Application.Pipeline;
+using Core.Entity.Pipeline;
 
 namespace Application.Executors
 {
     public class RenderStageExecutor : IStageExecutor
     {
-        public Task ExecuteAsync(ContentPipelineRun pipeline, StageConfig stage, CancellationToken ct)
+        public Task<StageResult> ExecuteAsync(ContentPipelineRun contentPipelineRun, StageConfig config, StageExecution execution, PipelineContext context, CancellationToken ct)
         {
-            return Task.CompletedTask;
+            throw new NotImplementedException();
         }
     }
 

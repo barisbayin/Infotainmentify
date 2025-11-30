@@ -1,4 +1,5 @@
-﻿using Application.Models;
+﻿using Application.AiLayer.Abstract;
+using Application.Models;
 using Core.Enums;
 using System.Net.Http.Json;
 using System.Text.Json;

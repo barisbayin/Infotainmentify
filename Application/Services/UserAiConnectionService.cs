@@ -2,7 +2,7 @@
 using Application.Contracts.UserAiConnection;
 using Core.Abstractions;
 using Core.Contracts;
-using Core.Entity;
+using Core.Entity.User;
 using Core.Enums;
 using System.Text.Json;
 

@@ -6,63 +6,27 @@ namespace Application.Mappers
 {
     public static class ScriptMapper
     {
-        public static ScriptListDto ToListDto(this Script e)
-            => new()
-            {
-                Id = e.Id,
-                Title = e.Title,
-                Summary = e.Summary,
-                Language = e.Language,
-                RenderStyle = e.RenderStyle,
-                ProductionType = e.ProductionType,
-                PromptName = e.Prompt?.Name,
-                AiProvider = e.AiConnection?.Provider.ToString(),
-                ModelName = e.MetaJson?.Contains("model") == true
-                    ? ExtractModelFromMeta(e.MetaJson)
-                    : e.AiConnection?.TextModel,
-                TopicCode = e.Topic?.TopicCode,
-                TopicPremise = e.Topic?.Premise,
-                CreatedAt = e.CreatedAt
-            };
-
-        public static ScriptDetailDto ToDetailDto(this Script e)
-            => new()
-            {
-                Id = e.Id,
-                Title = e.Title,
-                Content = e.Content,
-                Summary = e.Summary,
-                Language = e.Language,
-                RenderStyle = e.RenderStyle,
-                ProductionType = e.ProductionType,
-                TopicId = e.TopicId,
-                PromptId = e.PromptId,
-                AiConnectionId = e.AiConnectionId,
-                ScriptGenerationProfileId = e.ScriptGenerationProfileId,
-                TopicCode = e.Topic?.TopicCode,
-                TopicPremise = e.Topic?.Premise,
-                PromptName = e.Prompt?.Name,
-                AiProvider = e.AiConnection?.Provider.ToString(),
-                ModelName = e.AiConnection?.TextModel,
-                ProfileName = e.ScriptGenerationProfile?.ProfileName,
-                MetaJson = e.MetaJson,
-                ScriptJson = e.ScriptJson,
-                ResponseTimeMs = e.ResponseTimeMs,
-                CreatedAt = e.CreatedAt,
-                UpdatedAt = e.UpdatedAt
-            };
-
-        private static string? ExtractModelFromMeta(string metaJson)
+        public static ScriptListDto ToListDto(this Script e) => new()
         {
-            try
-            {
-                var meta = System.Text.Json.JsonDocument.Parse(metaJson);
-                if (meta.RootElement.TryGetProperty("model", out var val))
-                    return val.GetString();
-            }
-            catch { /* ignore */ }
-            return null;
-        }
+            Id = e.Id,
+            Title = e.Title,
+            // Topic null olabilir, kontrol et
+            TopicTitle = e.Topic?.Title,
+            EstimatedDurationSec = e.EstimatedDurationSec,
+            CreatedAt = e.CreatedAt
+        };
+
+        public static ScriptDetailDto ToDetailDto(this Script e) => new()
+        {
+            Id = e.Id,
+            TopicId = e.TopicId,
+            Title = e.Title,
+            Content = e.Content,
+            ScenesJson = e.ScenesJson,
+            LanguageCode = e.LanguageCode,
+            EstimatedDurationSec = e.EstimatedDurationSec,
+            CreatedAt = e.CreatedAt
+        };
     }
 }
 

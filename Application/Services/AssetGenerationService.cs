@@ -1,9 +1,10 @@
 ﻿using Application.Abstractions;
-using Application.AiLayer;
+using Application.AiLayer.Abstract;
 using Application.Contracts.Script;
 using Application.Models;
 using Core.Contracts;
 using Core.Entity;
+using Core.Entity.User;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -16,7 +17,7 @@ namespace Application.Services
     /// </summary>
     public class AssetGenerationService
     {
-        private readonly IRepository<ContentPipelineRun> _pipelineRepo;
+        private readonly IRepository<ContentPipelineRun_> _pipelineRepo;
         private readonly IRepository<AutoVideoAssetFile> _assetRepo;
         private readonly IRepository<Script> _scriptRepo;
         private readonly IRepository<AppUser> _appUserRepo;
@@ -26,7 +27,7 @@ namespace Application.Services
         private readonly INotifierService _notifier;
 
         public AssetGenerationService(
-            IRepository<ContentPipelineRun> pipelineRepo,
+            IRepository<ContentPipelineRun_> pipelineRepo,
             IRepository<AutoVideoAssetFile> assetRepo,
             IRepository<Script> scriptRepo,
             IUnitOfWork uow,
@@ -106,11 +107,11 @@ namespace Application.Services
                 var ttsClient = await _aiFactory.ResolveTtsClientAsync(userId, ttsConnId, ct);
 
                 var imageModel = sgp.ImageModelName
-                    ?? sgp.ImageAiConnection?.ImageModel
+                    //?? sgp.ImageAiConnection?.ImageModel
                     ?? "imagen-3.0-generate-001";
 
                 var ttsModel = sgp.TtsModelName
-                    ?? sgp.TtsAiConnection?.VideoModel
+                    //?? sgp.TtsAiConnection?.VideoModel
                     ?? "gpt-4o-mini-tts";
 
                 var voiceName = dto.Voice?.Name ?? sgp.TtsVoice ?? "alloy";
@@ -244,7 +245,7 @@ namespace Application.Services
         // --------------------------------------------------------------------
 
         private async Task SaveAsset(
-          ContentPipelineRun pipeline,
+          ContentPipelineRun_ pipeline,
           AutoVideoAssetFileType type,
           int scene,
           string path,
@@ -264,7 +265,7 @@ namespace Application.Services
             await _uow.SaveChangesAsync();
         }
 
-        private async Task Log(ContentPipelineRun p, string msg)
+        private async Task Log(ContentPipelineRun_ p, string msg)
         {
             var logs = string.IsNullOrEmpty(p.LogJson)
                 ? new List<string>()

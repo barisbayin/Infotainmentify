@@ -1,5 +1,5 @@
 ﻿using Application.Abstractions;
-using Application.AiLayer;
+using Application.AiLayer.Abstract;
 using Core.Abstractions;
 using Core.Contracts;
 using Core.Entity;
@@ -17,7 +17,7 @@ namespace Application.Services
         private readonly RenderVideoService _renderService;
         private readonly UploadVideoService _uploadVideoService;
 
-        private readonly IRepository<ContentPipelineRun> _pipelineRepo;
+        private readonly IRepository<ContentPipelineRun_> _pipelineRepo;
         private readonly IRepository<VideoGenerationProfile> _profileRepo;
         private readonly IRepository<Topic> _topicRepo;
         private readonly IRepository<Script> _scriptRepo;
@@ -39,7 +39,7 @@ namespace Application.Services
             RenderVideoService renderService,
             UploadVideoService uploadVideoService,
 
-            IRepository<ContentPipelineRun> pipelineRepo,
+            IRepository<ContentPipelineRun_> pipelineRepo,
             IRepository<VideoGenerationProfile> profileRepo,
             IRepository<Topic> topicRepo,
             IRepository<Script> scriptRepo,
@@ -77,7 +77,7 @@ namespace Application.Services
         // ------------------------------
         // MAIN PIPELINE ENTRY POINT
         // ------------------------------
-        public async Task<ContentPipelineRun> RunAsync(int userId, int profileId, CancellationToken ct)
+        public async Task<ContentPipelineRun_> RunAsync(int userId, int profileId, CancellationToken ct)
         {
 
             // 1) Pipeline oluştur
@@ -181,7 +181,7 @@ namespace Application.Services
         }
 
 
-        private async Task SelectTopicAsync(ContentPipelineRun pipeline, CancellationToken ct)
+        private async Task SelectTopicAsync(ContentPipelineRun_ pipeline, CancellationToken ct)
         {
             if (pipeline.TopicId.HasValue)
             {
@@ -213,7 +213,7 @@ namespace Application.Services
                 premise = topic.Premise
             });
         }
-        private async Task GenerateScriptAsync(ContentPipelineRun pipeline, int? userId, CancellationToken ct)
+        private async Task GenerateScriptAsync(ContentPipelineRun_ pipeline, int? userId, CancellationToken ct)
         {
             try
             {
@@ -250,7 +250,7 @@ namespace Application.Services
 
         }
 
-        private async Task UploadVideoAsync(ContentPipelineRun pipeline, int? userId, CancellationToken ct)
+        private async Task UploadVideoAsync(ContentPipelineRun_ pipeline, int? userId, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -296,7 +296,7 @@ namespace Application.Services
             }
         }
 
-        private async Task FinalizePipelineAsync(ContentPipelineRun pipeline, CancellationToken ct)
+        private async Task FinalizePipelineAsync(ContentPipelineRun_ pipeline, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 

@@ -2,6 +2,7 @@
 using Core.Abstractions;
 using Core.Contracts;
 using Core.Entity;
+using Core.Entity.User;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -10,7 +11,7 @@ namespace Application.Services
 {
     public class AutoVideoPipelineService
     {
-        private readonly IRepository<ContentPipelineRun> _pipelineRepo;
+        private readonly IRepository<ContentPipelineRun_> _pipelineRepo;
         private readonly IRepository<VideoGenerationProfile> _profileRepo;
         private readonly IRepository<AutoVideoAssetFile> _assetRepo;
         private readonly IRepository<AppUser> _userRepo;
@@ -20,7 +21,7 @@ namespace Application.Services
         private readonly INotifierService _notifier;
 
         public AutoVideoPipelineService(
-            IRepository<ContentPipelineRun> pipelineRepo,
+            IRepository<ContentPipelineRun_> pipelineRepo,
             IRepository<VideoGenerationProfile> profileRepo,
             IRepository<AutoVideoAssetFile> assetRepo,
             IRepository<AppUser> userRepo,
@@ -42,7 +43,7 @@ namespace Application.Services
         // ------------------------------------------------------------
         // CREATE PIPELINE
         // ------------------------------------------------------------
-        public async Task<ContentPipelineRun> CreatePipelineAsync(int userId, int profileId, CancellationToken ct)
+        public async Task<ContentPipelineRun_> CreatePipelineAsync(int userId, int profileId, CancellationToken ct)
         {
             try
             {
@@ -56,7 +57,7 @@ namespace Application.Services
                     throw new UnauthorizedAccessException("Profile erişilemedi.");
 
                 // Pipeline kaydı oluştur
-                var pipeline = new ContentPipelineRun
+                var pipeline = new ContentPipelineRun_
                 {
                     AppUserId = userId,
                     ProfileId = profileId,
@@ -87,7 +88,7 @@ namespace Application.Services
         // ------------------------------------------------------------
         // GET PIPELINE DETAILS
         // ------------------------------------------------------------
-        public async Task<ContentPipelineRun?> GetAsync(int id, CancellationToken ct)
+        public async Task<ContentPipelineRun_?> GetAsync(int id, CancellationToken ct)
         {
             return await _pipelineRepo.FirstOrDefaultAsync(
                 x => x.Id == id && x.AppUserId == _current.UserId,
@@ -107,7 +108,7 @@ namespace Application.Services
         // ------------------------------------------------------------
         // LIST PIPELINES (USER SCOPED)
         // ------------------------------------------------------------
-        public async Task<IReadOnlyList<ContentPipelineRun>> ListAsync(CancellationToken ct)
+        public async Task<IReadOnlyList<ContentPipelineRun_>> ListAsync(CancellationToken ct)
         {
             return await _pipelineRepo.FindAsync(
                 x => x.AppUserId == _current.UserId,
@@ -156,7 +157,7 @@ namespace Application.Services
         // ------------------------------------------------------------
         // APPEND LOG
         // ------------------------------------------------------------
-        private void AppendLog(ContentPipelineRun pipeline, string message)
+        private void AppendLog(ContentPipelineRun_ pipeline, string message)
         {
             var logs = !string.IsNullOrWhiteSpace(pipeline.LogJson)
                 ? JsonSerializer.Deserialize<List<string>>(pipeline.LogJson, Utf8JsonOptions) ?? new List<string>()
@@ -170,7 +171,7 @@ namespace Application.Services
         // ------------------------------------------------------------
         // HELPER: Add log + save
         // ------------------------------------------------------------
-        public async Task AddLogAsync(ContentPipelineRun p, string msg, CancellationToken ct)
+        public async Task AddLogAsync(ContentPipelineRun_ p, string msg, CancellationToken ct)
         {
             AppendLog(p, msg);
             await _uow.SaveChangesAsync(ct);
@@ -185,7 +186,7 @@ namespace Application.Services
         // ------------------------------------------------------------
         // CREATE PIPELINE FOLDERS
         // ------------------------------------------------------------
-        private async Task CreatePipelineFolders(ContentPipelineRun pipeline, AppUser appUser, CancellationToken ct)
+        private async Task CreatePipelineFolders(ContentPipelineRun_ pipeline, AppUser appUser, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 

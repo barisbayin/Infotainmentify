@@ -3,7 +3,7 @@ using Application.Contracts.UserSocialChannel;
 using Application.Mappers;
 using Core.Abstractions;
 using Core.Contracts;
-using Core.Entity;
+using Core.Entity.User;
 using System.Text.Json;
 
 namespace Application.Services

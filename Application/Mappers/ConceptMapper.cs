@@ -1,5 +1,5 @@
 ﻿using Application.Contracts.Concept;
-using Core.Entity;
+using Core.Entity.Pipeline;
 
 namespace Application.Mappers
 {

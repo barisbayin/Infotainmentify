@@ -8,80 +8,30 @@ namespace Infrastructure.Configurations
     /// Topic entity configuration
     /// İçerik üretim pipeline'ının çekirdeği.
     /// </summary>
-    public class TopicConfiguration : BaseEntityConfiguration<Topic>
+    public sealed class TopicConfiguration : BaseEntityConfiguration<Topic>, IEntityTypeConfiguration<Topic>
     {
-        public override void Configure(EntityTypeBuilder<Topic> builder)
+        public override void Configure(EntityTypeBuilder<Topic> b)
         {
-            base.Configure(builder);
-            builder.ToTable("Topics");
+            base.Configure(b);
+            b.ToTable("Topics");
 
-            // 🔹 Unique Code
-            builder.HasIndex(e => e.TopicCode).IsUnique();
+            // Kullanıcı bazlı arama hızı için
+            b.HasIndex(x => x.AppUserId);
+            b.HasIndex(x => x.Category);
 
-            // 🔹 Alan uzunlukları
-            builder.Property(e => e.TopicCode)
-                .HasMaxLength(64)
-                .IsRequired();
+            b.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Premise).IsRequired(); // NVARCHAR(MAX)
+            b.Property(x => x.LanguageCode).HasMaxLength(10).IsRequired();
 
-            builder.Property(e => e.Category)
-                .HasMaxLength(64);
+            // JSON alanları
+            b.Property(x => x.TagsJson).IsRequired(false);
+            b.Property(x => x.RawJsonData).IsRequired(false);
 
-            builder.Property(e => e.SubCategory)
-                .HasMaxLength(128);
-
-            builder.Property(e => e.Series)
-                .HasMaxLength(128);
-
-            builder.Property(e => e.Tone)
-                .HasMaxLength(32);
-
-            builder.Property(e => e.PotentialVisual)
-                .HasMaxLength(500);
-
-            builder.Property(e => e.RenderStyle)
-                .HasMaxLength(64);
-
-            builder.Property(e => e.VoiceHint)
-                .HasMaxLength(64);
-
-            builder.Property(e => e.ScriptHint)
-                .HasMaxLength(64);
-
-            // 🔹 JSON alanı
-            builder.Property(e => e.TopicJson)
-                .HasColumnType("nvarchar(max)");
-
-            // 🔹 Bayraklar
-            builder.Property(e => e.NeedsFootage)
-                .HasDefaultValue(false);
-
-            builder.Property(e => e.FactCheck)
-                .HasDefaultValue(false);
-
-            builder.Property(e => e.ScriptGenerated)
-                .HasDefaultValue(false);
-
-            // 🔹 İlişkiler
-            builder.HasOne(e => e.Prompt)
-                .WithMany()
-                .HasForeignKey(e => e.PromptId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            builder.HasOne(e => e.Script)
-                .WithMany()
-                .HasForeignKey(e => e.ScriptId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            // 🔹 Zaman alanları
-            builder.Property(e => e.ScriptGeneratedAt)
-                .HasColumnType("datetimeoffset");
-
-            builder.Property(e => e.AllowScriptGeneration)
-                .HasDefaultValue(true); // ✅ varsayılan olarak açık
-
-            // 🔹 Priority varsayılan değeri
-            builder.Property(e => e.Priority)
-                .HasDefaultValue(5);
+            // İlişkiler
+            b.HasOne(x => x.AppUser)
+             .WithMany() // User tarafında listeye gerek yoksa boş bırak
+             .HasForeignKey(x => x.AppUserId)
+             .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

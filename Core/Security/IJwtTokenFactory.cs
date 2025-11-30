@@ -1,4 +1,4 @@
-﻿using Core.Entity;
+﻿using Core.Entity.User;
 
 namespace Core.Security
 {

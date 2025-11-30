@@ -1,10 +1,12 @@
-﻿using Core.Enums;
+﻿using Core.Entity.Pipeline;
+using Core.Entity.User;
+using Core.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.Entity
 {
-    public class ContentPipelineRun : BaseEntity
+    public class ContentPipelineRun_ : BaseEntity
     {
         // ---- Kullanıcı ----
         public int AppUserId { get; set; }

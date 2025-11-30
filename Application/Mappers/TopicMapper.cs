@@ -5,50 +5,33 @@ namespace Application.Contracts.Mappers
 {
     public static class TopicMapper
     {
-        // -------------------- LIST DTO --------------------
         public static TopicListDto ToListDto(this Topic e) => new()
         {
             Id = e.Id,
+            Title = e.Title,
+            // Premise çok uzunsa gridde kesmek iyi olabilir
+            Premise = e.Premise.Length > 100 ? e.Premise[..97] + "..." : e.Premise,
             Category = e.Category,
-            SubCategory = e.SubCategory,
-            Tone = e.Tone,
-            Premise = e.Premise,
-            PremiseTr = e.PremiseTr,
-            AllowScriptGeneration = e.AllowScriptGeneration,
-            ScriptGenerated = e.ScriptGenerated,
-            IsActive = e.IsActive,
-            PromptId = e.PromptId,
-            PromptName = e.Prompt?.Name,
-            UpdatedAt = e.UpdatedAt
+            Series = e.Series,
+            CreatedAt = e.CreatedAt
         };
 
-        // -------------------- DETAIL DTO --------------------
         public static TopicDetailDto ToDetailDto(this Topic e) => new()
         {
             Id = e.Id,
-            TopicCode = e.TopicCode,
+            Title = e.Title,
+            Premise = e.Premise,
+            LanguageCode = e.LanguageCode,
             Category = e.Category,
             SubCategory = e.SubCategory,
             Series = e.Series,
-            Premise = e.Premise,
-            PremiseTr = e.PremiseTr,
+            TagsJson = e.TagsJson,
             Tone = e.Tone,
-            PotentialVisual = e.PotentialVisual,
             RenderStyle = e.RenderStyle,
-            VoiceHint = e.VoiceHint,
-            ScriptHint = e.ScriptHint,
-            FactCheck = e.FactCheck,
-            NeedsFootage = e.NeedsFootage,
-            Priority = e.Priority,
-            TopicJson = e.TopicJson,
-            AllowScriptGeneration = e.AllowScriptGeneration,
-            ScriptGenerated = e.ScriptGenerated,
-            ScriptGeneratedAt = e.ScriptGeneratedAt,
-            PromptId = e.PromptId,
-            PromptName = e.Prompt?.Name,
-            ScriptId = e.ScriptId,
-            ScriptTitle = e.Script?.Title,
-            IsActive = e.IsActive,
+            VisualPromptHint = e.VisualPromptHint,
+            CreatedByRunId = e.CreatedByRunId,
+            SourcePresetId = e.SourcePresetId,
+            CreatedAt = e.CreatedAt,
             UpdatedAt = e.UpdatedAt
         };
     }

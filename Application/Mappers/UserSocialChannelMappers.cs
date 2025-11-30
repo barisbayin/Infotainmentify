@@ -1,5 +1,5 @@
 ﻿using Application.Contracts.UserSocialChannel;
-using Core.Entity;
+using Core.Entity.User;
 using System.Text.Json;
 
 namespace Application.Mappers

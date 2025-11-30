@@ -1,4 +1,5 @@
-﻿using Core.Enums;
+﻿using Core.Entity.User;
+using Core.Enums;
 using System.ComponentModel.DataAnnotations;
 
 namespace Core.Entity
@@ -9,7 +10,7 @@ namespace Core.Entity
         public AppUser User { get; set; } = null!;
 
         public int AutoVideoPipelineId { get; set; }
-        public ContentPipelineRun Pipeline { get; set; } = null!;
+        public ContentPipelineRun_ Pipeline { get; set; } = null!;
 
         // Hangi sahneye ait
         public int SceneNumber { get; set; }

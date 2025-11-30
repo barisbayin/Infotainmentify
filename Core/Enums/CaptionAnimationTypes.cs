@@ -1,14 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Core.Enums
+﻿namespace Core.Enums
 {
     public enum CaptionAnimationTypes
     {
         None = 0,
-        Bounce = 1
+        PopUp = 1,      // Kelimeler patlayarak gelir
+        Typewriter = 2, // Daktilo gibi
+        FadeIn = 3,
+        SlideUp = 4
     }
 }

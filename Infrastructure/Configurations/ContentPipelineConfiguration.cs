@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Infrastructure.Configurations
 {
-    public class ContentPipelineConfiguration : BaseEntityConfiguration<ContentPipelineRun>
+    public class ContentPipelineConfiguration : BaseEntityConfiguration<ContentPipelineRun_>
     {
-        public override void Configure(EntityTypeBuilder<ContentPipelineRun> builder)
+        public override void Configure(EntityTypeBuilder<ContentPipelineRun_> builder)
         {
             base.Configure(builder);
 

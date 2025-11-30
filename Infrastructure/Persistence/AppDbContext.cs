@@ -1,5 +1,6 @@
 ﻿using Core.Abstractions;
 using Core.Entity;
+using Core.Entity.User;
 using Infrastructure.Configurations;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;

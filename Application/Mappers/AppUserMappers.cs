@@ -1,5 +1,5 @@
 ﻿using Application.Contracts.AppUser;
-using Core.Entity;
+using Core.Entity.User;
 
 namespace Application.Mappers
 {

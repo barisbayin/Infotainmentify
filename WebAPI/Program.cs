@@ -1,13 +1,16 @@
 using Application;
 using Application.Abstractions;
 using Application.AiLayer;
+using Application.AiLayer.Abstract;
+using Application.AiLayer.Concrete;
 using Application.Executors;
+using Application.Extensions;
 using Application.Job;
 using Application.Options;
 using Application.Services;
 using Application.SocialPlatform;
 using Core.Abstractions;
-using Core.Entity;
+using Core.Entity.User;
 using Core.Security;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -80,16 +83,21 @@ namespace WebAPI
             builder.Services.AddScoped<RenderVideoService>();
             builder.Services.AddScoped<RenderProfileService>();
 
+          
+
             builder.Services.AddSingleton<StageExecutorFactory>();
 
+            builder.Services.AddInfotainmentifyExecutors();
+            builder.Services.AddInfotainmentifyAiServices();
+
             // Executors (transient olmalý)
-            builder.Services.AddTransient<TopicStageExecutor>();
-            builder.Services.AddTransient<ContentPlanStageExecutor>();
-            builder.Services.AddTransient<ImageStageExecutor>();
-            builder.Services.AddTransient<TtsStageExecutor>();
-            builder.Services.AddTransient<VideoStageExecutor>();
-            builder.Services.AddTransient<RenderStageExecutor>();
-            builder.Services.AddTransient<UploadStageExecutor>();
+            //builder.Services.AddTransient<TopicStageExecutor>();
+            //builder.Services.AddTransient<ContentPlanStageExecutor>();
+            //builder.Services.AddTransient<ImageStageExecutor>();
+            //builder.Services.AddTransient<TtsStageExecutor>();
+            //builder.Services.AddTransient<VideoStageExecutor>();
+            //builder.Services.AddTransient<RenderStageExecutor>();
+            //builder.Services.AddTransient<UploadStageExecutor>();
 
             // Ýhtiyaç olursa
             //builder.Services.AddTransient<VideoAIStageExecutor>();

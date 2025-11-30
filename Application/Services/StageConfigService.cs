@@ -1,6 +1,6 @@
 ﻿using Core.Abstractions;
 using Core.Contracts;
-using Core.Entity;
+using Core.Entity.Pipeline;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 

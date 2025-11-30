@@ -5,8 +5,8 @@
         YouTube = 1,
         Instagram = 2,
         TikTok = 3,
-        Twitter = 4,
-        Other = 99
-        // Gelecekte Twitter (X), LinkedIn vb. eklenebilir.
+        Facebook = 4,
+        Twitter = 5,
+        LinkedIn = 6
     }
 }

@@ -1,13 +1,16 @@
 ﻿using Application.Abstractions;
+using Application.Models;
+using Application.Pipeline;
 using Core.Entity;
+using Core.Entity.Pipeline;
 
 namespace Application.Executors
 {
     public class UploadStageExecutor : IStageExecutor
     {
-        public Task ExecuteAsync(ContentPipelineRun pipeline, StageConfig stage, CancellationToken ct)
+        public Task<StageResult> ExecuteAsync(ContentPipelineRun contentPipelineRun, StageConfig config, StageExecution execution, PipelineContext context, CancellationToken ct)
         {
-            return Task.CompletedTask;
+            throw new NotImplementedException();
         }
     }
 }

@@ -1,7 +1,7 @@
 ﻿using Application.Models;
 using Core.Enums;
 
-namespace Application.AiLayer
+namespace Application.AiLayer.Abstract
 {
     /// <summary>
     /// Ortak AI sağlayıcı arabirimi (OpenAI, Gemini, Anthropic vb.)

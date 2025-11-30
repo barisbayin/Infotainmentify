@@ -1,10 +1,10 @@
 ﻿using Core.Contracts;
-using Core.Entity;
 using Core.Enums;
 using Core.Security;
 using Microsoft.Extensions.Configuration;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
+using Core.Entity.User;
 
 namespace Infrastructure.Persistence
 {

@@ -11,7 +11,8 @@ namespace Application.Contracts.Mappers
             Name = e.Name,
             Category = e.Category,
             Language = e.Language,
-            Description = e.Description,
+            // Description gridde uzun kaçabilir, istersen kırpabilirsin:
+            Description = e.Description?.Length > 50 ? e.Description[..47] + "..." : e.Description,
             IsActive = e.IsActive,
             UpdatedAt = e.UpdatedAt
         };
@@ -25,7 +26,8 @@ namespace Application.Contracts.Mappers
             Description = e.Description,
             IsActive = e.IsActive,
             Body = e.Body,
-            SystemPrompt = e.SystemPrompt
+            SystemPrompt = e.SystemPrompt,
+            CreatedAt = e.CreatedAt // <--- BUNU EKLEMELİSİN
         };
     }
 }
