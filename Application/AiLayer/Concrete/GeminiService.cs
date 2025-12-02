@@ -333,29 +333,74 @@ namespace Application.AiLayer.Concrete
 
         private string ExtractTextFromGeminiResponse(string json)
         {
-            // Vertex AI Response parsing basitleştirilmiş
-            // Gerçekte: candidates[0].content.parts[0].text
-            // Burada System.Text.Json ile path parse edilecek
+            if (string.IsNullOrWhiteSpace(json)) return string.Empty;
+
             try
             {
                 using var doc = JsonDocument.Parse(json);
-                // Yapı: [{ "candidates": [ { "content": { "parts": [ { "text": "..." } ] } } ] }] (Stream ise array döner)
-                // Veya direkt object döner.
-                // Vertex AI stream response genelde bir JSON Array gelir.
-                if (json.TrimStart().StartsWith("["))
+                var root = doc.RootElement;
+
+                // SENARYO 1: Streaming Response (JSON Array [...])
+                // Cevap parçalı geliyorsa hepsini birleştirmemiz lazım.
+                if (root.ValueKind == JsonValueKind.Array)
                 {
-                    var root = doc.RootElement[0]; // İlk chunk
-                    return root.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
+                    var fullTextBuilder = new StringBuilder();
+                    foreach (var chunk in root.EnumerateArray())
+                    {
+                        fullTextBuilder.Append(ExtractTextFromSingleCandidate(chunk));
+                    }
+                    return fullTextBuilder.ToString();
                 }
-                else
+                // SENARYO 2: Unary Response (JSON Object {...})
+                // Cevap tek parça geliyorsa direkt alıyoruz.
+                else if (root.ValueKind == JsonValueKind.Object)
                 {
-                    return doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
+                    return ExtractTextFromSingleCandidate(root);
                 }
+
+                // Tanımsız format
+                return json;
             }
             catch
             {
-                return json; // Parse edemezsek ham data dönelim debug için
+                // JSON bozuksa veya yapı çok farklıysa ham veriyi dön (Debug için hayat kurtarır)
+                return json;
             }
+        }
+
+        /// <summary>
+        /// Tek bir Candidate objesinin içindeki 'text' alanını güvenli bir şekilde çeker.
+        /// Path: candidates[0] -> content -> parts[*] -> text
+        /// </summary>
+        private string ExtractTextFromSingleCandidate(JsonElement element)
+        {
+            // 1. "candidates" dizisi var mı?
+            if (element.TryGetProperty("candidates", out var candidates) &&
+                candidates.ValueKind == JsonValueKind.Array &&
+                candidates.GetArrayLength() > 0)
+            {
+                var firstCandidate = candidates[0];
+
+                // 2. "content" ve "parts" var mı?
+                if (firstCandidate.TryGetProperty("content", out var content) &&
+                    content.TryGetProperty("parts", out var parts) &&
+                    parts.ValueKind == JsonValueKind.Array)
+                {
+                    var textBuilder = new StringBuilder();
+
+                    // 3. "parts" içindeki tüm metinleri topla
+                    foreach (var part in parts.EnumerateArray())
+                    {
+                        if (part.TryGetProperty("text", out var textElement))
+                        {
+                            textBuilder.Append(textElement.GetString());
+                        }
+                    }
+                    return textBuilder.ToString();
+                }
+            }
+
+            return string.Empty;
         }
     }
 }

@@ -3,6 +3,7 @@ using Application.Models;
 using Core.Contracts;
 using Core.Entity.Pipeline;
 using Core.Enums;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace Application.Pipeline
@@ -38,13 +39,14 @@ namespace Application.Pipeline
             // Include'lar önemli! Template ve Config'leri çekmemiz lazım.
             // (Repository yapına göre Include syntax'ın değişebilir)
             var run = await _pipelineRepo.FirstOrDefaultAsync(
-                r => r.Id == pipelineRunId,
-                false, // Tracking açık olsun
-                ct,
-                // İlişkileri yükle:
-                r => r.Template,
-                r => r.StageExecutions
-            );
+                    predicate: r => r.Id == pipelineRunId,
+                    include: source => source
+                        .Include(r => r.Template)
+                            .ThenInclude(t => t.StageConfigs) // 🔥 KRİTİK NOKTA: Template'in içindeki Config'leri de al!
+                        .Include(r => r.StageExecutions),     // Run'ın kendi executionları
+                    asNoTracking: false, // Değişiklik yapacağız, tracking açık olsun
+                    ct: ct
+                );
 
             // Eğer Repository include desteklemiyorsa burada manuel yüklemen gerekebilir.
             // run.Template.StageConfigs'e ihtiyacımız var.

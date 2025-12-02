@@ -15,41 +15,33 @@ namespace WebAPI.Controllers
     [Authorize]
     public class PipelineRunsController : ControllerBase
     {
-        private readonly ContentPipelineRunner _runnerService; // Adı değişmişti, kontrol et
+        private readonly IServiceProvider _sp; // 🔥 YENİ EKLENDİ
         private readonly IRepository<ContentPipelineTemplate> _templateRepo;
         private readonly IRepository<ContentPipelineRun> _runRepo;
         private readonly IUnitOfWork _uow;
 
         public PipelineRunsController(
-            ContentPipelineRunner runnerService,
+            IServiceProvider sp, // 🔥 YENİ EKLENDİ
             IRepository<ContentPipelineTemplate> templateRepo,
             IRepository<ContentPipelineRun> runRepo,
             IUnitOfWork uow)
         {
-            _runnerService = runnerService;
+            _sp = sp;
             _templateRepo = templateRepo;
             _runRepo = runRepo;
             _uow = uow;
         }
 
-        // ============================================================
-        // CREATE (Yeni İş Emri)
-        // ============================================================
+        // CREATE
         [HttpPost]
         public async Task<IActionResult> CreateRun([FromBody] CreatePipelineRunRequest request, CancellationToken ct)
         {
             int userId = User.GetUserId();
 
-            // 1. Template kontrolü (Bu kullanıcıya mı ait?)
-            var template = await _templateRepo.FirstOrDefaultAsync(
-                t => t.Id == request.TemplateId && t.AppUserId == userId,
-                asNoTracking: true,
-                ct: ct);
+            // ... (Template kontrolü ve Run kaydı aynı) ...
+            var template = await _templateRepo.FirstOrDefaultAsync(t => t.Id == request.TemplateId && t.AppUserId == userId, asNoTracking: true, ct: ct);
+            if (template == null) return NotFound("Template not found.");
 
-            if (template == null)
-                return NotFound("Template not found or access denied.");
-
-            // 2. Run kaydını oluştur
             var run = new ContentPipelineRun
             {
                 AppUserId = userId,
@@ -61,37 +53,48 @@ namespace WebAPI.Controllers
             await _runRepo.AddAsync(run, ct);
             await _uow.SaveChangesAsync(ct);
 
-            // 3. AutoStart varsa ateşle (Fire-and-Forget)
             if (request.AutoStart)
             {
-                // Not: Production'da burası Hangfire/Quartz kuyruğuna atılmalı.
-                // Task.Run MVP için OK'dir ama sunucu kapanırsa işlem kaybolur.
-                _ = Task.Run(() => _runnerService.RunAsync(run.Id, CancellationToken.None));
+                // 🔥 FIX: Scope Oluşturma
+                // Arka plan işlemi olduğu için yeni bir scope lazım.
+                _ = Task.Run(async () =>
+                {
+                    using var scope = _sp.CreateScope();
+                    var runner = scope.ServiceProvider.GetRequiredService<ContentPipelineRunner>();
+                    try
+                    {
+                        await runner.RunAsync(run.Id, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[BACKGROUND ERROR] Run #{run.Id}: {ex}");
+                        // Hata loglaması buraya
+                    }
+                });
             }
 
-            return Ok(new { RunId = run.Id, Message = "Pipeline created." });
+            return Ok(new { RunId = run.Id, Message = "Pipeline created and started." });
         }
 
-        // ============================================================
-        // START (Manuel Tetikleme)
-        // ============================================================
+        // START
         [HttpPost("{id}/start")]
         public async Task<IActionResult> StartRun(int id, CancellationToken ct)
         {
             int userId = User.GetUserId();
-
             var run = await _runRepo.GetByIdAsync(id, asNoTracking: true, ct);
 
-            if (run == null) return NotFound();
-            if (run.AppUserId != userId) return NotFound(); // Güvenlik
+            if (run == null || run.AppUserId != userId) return NotFound();
+            if (run.Status == ContentPipelineStatus.Running) return BadRequest("Already running.");
 
-            if (run.Status == ContentPipelineStatus.Running)
-                return BadRequest("Pipeline is already running.");
+            // 🔥 FIX: Scope Oluşturma
+            _ = Task.Run(async () =>
+            {
+                using var scope = _sp.CreateScope();
+                var runner = scope.ServiceProvider.GetRequiredService<ContentPipelineRunner>();
+                await runner.RunAsync(run.Id, CancellationToken.None);
+            });
 
-            // Arka planda ateşle
-            _ = Task.Run(() => _runnerService.RunAsync(run.Id, CancellationToken.None));
-
-            return Ok(new { Message = "Execution started in background." });
+            return Ok(new { Message = "Execution started." });
         }
 
         // ============================================================

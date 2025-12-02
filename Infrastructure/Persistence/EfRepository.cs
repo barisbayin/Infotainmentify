@@ -224,5 +224,14 @@ namespace Infrastructure.Persistence
 
         public Task<int> SaveChangesAsync(CancellationToken ct = default)
             => _context.SaveChangesAsync(ct);
+
+        public async Task DeleteRangeAsync(Expression<Func<TEntity, bool>> predicate, CancellationToken ct = default)
+        {
+            // Bu komut SQL'e direkt "DELETE FROM Table WHERE ..." gönderir.
+            // Change Tracker'a takılmaz, çok hızlıdır ve o hatayı almazsın.
+            await _dbSet
+                .Where(predicate)
+                .ExecuteDeleteAsync(ct);
+        }
     }
 }

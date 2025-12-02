@@ -2,6 +2,7 @@
 using Application.Services.Base;
 using Core.Contracts;
 using Core.Entity.Pipeline;
+using Core.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services.Pipeline
@@ -82,7 +83,8 @@ namespace Application.Services.Pipeline
         // UPDATE
         public async Task UpdateAsync(int id, SavePipelineTemplateDto dto, int userId, CancellationToken ct)
         {
-            // Tracking AÇIK çekiyoruz
+            // 1. Template'i ve Mevcut Stage'lerini ÇEK (Tracking AÇIK)
+            // Include yapıyoruz çünkü var olan satırları güncelleyeceğiz.
             var entity = await _repo.FirstOrDefaultAsync(
                 t => t.Id == id,
                 include: src => src.Include(t => t.StageConfigs),
@@ -92,33 +94,63 @@ namespace Application.Services.Pipeline
             if (entity == null || entity.AppUserId != userId)
                 throw new KeyNotFoundException("Şablon bulunamadı.");
 
-            // Ana bilgileri güncelle
+            // 2. Ana bilgileri güncelle
             entity.Name = dto.Name;
             entity.Description = dto.Description;
             entity.ConceptId = dto.ConceptId;
 
-            // STAGE YÖNETİMİ: Eskileri sil, yenileri ekle (En temiz yöntem)
-            // Mevcut stage'leri temizle
-            entity.StageConfigs.Clear();
+            // =================================================================
+            // 🔥 AKILLI EŞİTLEME (SMART SYNC)
+            // Silip yeniden eklemek yerine, eldekileri güncelliyoruz.
+            // =================================================================
 
-            // Yenileri ekle
-            if (dto.Stages != null)
+            var newStages = dto.Stages ?? new List<SaveStageConfigDto>();
+            var existingStages = entity.StageConfigs.OrderBy(x => x.Order).ToList();
+
+            // Döngü ile eşleştirme yapıyoruz
+            int maxCount = Math.Max(newStages.Count, existingStages.Count);
+
+            for (int i = 0; i < maxCount; i++)
             {
-                int order = 1;
-                foreach (var stageDto in dto.Stages)
+                if (i < newStages.Count && i < existingStages.Count)
                 {
+                    // A) İKİSİ DE VAR -> GÜNCELLE (Recycle)
+                    // Mevcut satırı al, yeni verilerle güncelle. ID ve Log bağlantısı korunur.
+                    var existing = existingStages[i];
+                    var newVal = newStages[i];
+
+                    existing.StageType = newVal.StageType;
+                    existing.PresetId = newVal.PresetId == 0 ? null : newVal.PresetId;
+                    existing.Order = i + 1;
+
+                    // Soft delete olmuşsa geri getir (Eğer sistemde varsa)
+                    // existing.IsDeleted = false; 
+                }
+                else if (i < newStages.Count)
+                {
+                    // B) YENİSİ FAZLA -> EKLE (Insert)
+                    var newVal = newStages[i];
                     entity.StageConfigs.Add(new StageConfig
                     {
-                        ContentPipelineTemplateId = entity.Id, // ID'yi bağla
-                        StageType = stageDto.StageType,
-                        PresetId = stageDto.PresetId,
-                        Order = order++
+                        StageType = newVal.StageType,
+                        PresetId = newVal.PresetId == 0 ? null : newVal.PresetId,
+                        Order = i + 1
+                        // TemplateId otomatik set edilir
                     });
+                }
+                else
+                {
+                    // C) ESKİSİ FAZLA -> SİL (Soft Delete)
+                    // Fazlalık olan satırı Repo üzerinden siliyoruz.
+                    // Repo'da Soft Delete varsa "Removed=1" yapar, fiziksel silmez. Hata vermez.
+                    var extra = existingStages[i];
+                    _stageRepo.Delete(extra);
                 }
             }
 
-            // Base Update çağırmaya gerek yok, EF Change Tracker halleder ama tarih güncellemek için çağırabiliriz
             entity.UpdatedAt = DateTime.UtcNow;
+
+            // 3. Kaydet
             await _uow.SaveChangesAsync(ct);
         }
     }

@@ -77,5 +77,7 @@ namespace Core.Contracts
 
         // İstersen burada kalsın; çoğu mimaride UoW'a taşınır.
         Task<int> SaveChangesAsync(CancellationToken ct = default);
+
+        Task DeleteRangeAsync(Expression<Func<TEntity, bool>> predicate, CancellationToken ct = default);
     }
 }

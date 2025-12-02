@@ -25,7 +25,7 @@ namespace Core.Entity
         // --------------------------------------------------------
 
         // Kısa başlık / Kod yerine ID kullanacağız ama slug tutabilirsin.
-        [Required, MaxLength(200)]
+        [Required, MaxLength(1000)]
         public string Title { get; set; } = default!;
 
         // Ana Fikir (İngilizce veya Türkçe fark etmez, LanguageCode belirler)
@@ -63,7 +63,7 @@ namespace Core.Entity
         [MaxLength(64)]
         public string? RenderStyle { get; set; }   // "Cinematic", "PixelArt"
 
-        [MaxLength(256)]
+        [MaxLength(4000)]
         public string? VisualPromptHint { get; set; } // AI'ın görsel önerisi ("Dark forest with fog")
 
         // --------------------------------------------------------
