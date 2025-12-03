@@ -39,5 +39,9 @@ namespace Application.Abstractions
         // ------------------------------
 
         Task EnsureUserScaffoldAsync(AppUser user, CancellationToken ct = default);
+
+
+        //yeniler
+        Task<string> GetRunDirectoryAsync(int userId, int runId, string subFolder);
     }
 }

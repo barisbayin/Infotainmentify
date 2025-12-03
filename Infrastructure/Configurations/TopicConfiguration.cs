@@ -22,6 +22,7 @@ namespace Infrastructure.Configurations
             b.Property(x => x.Title).HasMaxLength(200).IsRequired();
             b.Property(x => x.Premise).IsRequired(); // NVARCHAR(MAX)
             b.Property(x => x.LanguageCode).HasMaxLength(10).IsRequired();
+            b.Property(x => x.ConceptId).IsRequired(false); // Nullable olabilir
 
             // JSON alanları
             b.Property(x => x.TagsJson).IsRequired(false);
@@ -32,6 +33,12 @@ namespace Infrastructure.Configurations
              .WithMany() // User tarafında listeye gerek yoksa boş bırak
              .HasForeignKey(x => x.AppUserId)
              .OnDelete(DeleteBehavior.Restrict);
+
+            // İlişki
+            b.HasOne(t => t.Concept)
+             .WithMany() // Concept tarafında "Topics" listesi yoksa boş bırak
+             .HasForeignKey(t => t.ConceptId)
+             .OnDelete(DeleteBehavior.SetNull); // Konsept silinirse fikirler kalabilir (veya Cascade silinsin dersen Cascade yap)
         }
     }
 }

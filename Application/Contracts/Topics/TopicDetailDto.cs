@@ -6,6 +6,7 @@
         public string Title { get; set; } = default!;
         public string Premise { get; set; } = default!;
         public string LanguageCode { get; set; } = default!;
+        public int? ConceptId { get; set; }
 
         public string? Category { get; set; }
         public string? SubCategory { get; set; }

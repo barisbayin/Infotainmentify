@@ -93,7 +93,7 @@ namespace Application.AiLayer.Concrete
                 {
                     new { role = "user", parts = new[] { new { text = prompt } } }
                 },
-                generationConfig = new { temperature, maxOutputTokens = 2048 }
+                generationConfig = new { temperature, maxOutputTokens = 65535 }
             };
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url);

@@ -1,4 +1,5 @@
-﻿using Core.Entity.User;
+﻿using Core.Entity.Pipeline;
+using Core.Entity.User;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -9,6 +10,13 @@ namespace Core.Entity
         [Required]
         public int AppUserId { get; set; }
         public AppUser AppUser { get; set; } = null!;
+
+        // 🔥 YENİ EKLENEN İLİŞKİ
+        // Bir fikir, belli bir konsept (marka) altında üretilmiş olabilir.
+        public int? ConceptId { get; set; }
+
+        // Navigation (Opsiyonel, include etmek istersen)
+        public Concept? Concept { get; set; }
 
         // --------------------------------------------------------
         // KÖKEN (Provenance) - Bu fikir nereden geldi?

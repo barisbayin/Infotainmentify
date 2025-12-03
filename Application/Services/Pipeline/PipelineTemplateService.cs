@@ -19,14 +19,20 @@ namespace Application.Services.Pipeline
             _stageRepo = stageRepo;
         }
 
-        // LIST (Concept Include Edilmeli)
-        public async Task<IReadOnlyList<ContentPipelineTemplate>> ListAsync(int userId, string? q, CancellationToken ct)
+        public async Task<IReadOnlyList<ContentPipelineTemplate>> ListAsync(
+                    int userId,
+                    string? q,
+                    int? conceptId, // 🔥 YENİ PARAMETRE
+                    CancellationToken ct)
         {
             return await _repo.FindAsync(
-                predicate: t => t.AppUserId == userId && (string.IsNullOrWhiteSpace(q) || t.Name.Contains(q)),
+                predicate: t =>
+                    t.AppUserId == userId &&
+                    (!conceptId.HasValue || t.ConceptId == conceptId) && // 🔥 FİLTRE
+                    (string.IsNullOrWhiteSpace(q) || t.Name.Contains(q)),
                 orderBy: t => t.CreatedAt,
                 desc: true,
-                include: src => src.Include(t => t.Concept).Include(t => t.StageConfigs), // StageCount için
+                include: src => src.Include(t => t.Concept).Include(t => t.StageConfigs),
                 asNoTracking: true,
                 ct: ct
             );

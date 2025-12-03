@@ -24,11 +24,12 @@ namespace WebAPI.Controllers
         // GET: api/topics?q=space&category=science
         [HttpGet]
         public async Task<ActionResult<IEnumerable<TopicListDto>>> List(
-            [FromQuery] string? q,
-            [FromQuery] string? category,
-            CancellationToken ct)
+                    [FromQuery] string? q,
+                    [FromQuery] string? category,
+                    [FromQuery] int? conceptId, // 🔥 YENİ PARAMETRE
+                    CancellationToken ct)
         {
-            var list = await _svc.ListAsync(User.GetUserId(), q, category, ct);
+            var list = await _svc.ListAsync(User.GetUserId(), q, category, conceptId, ct);
             return Ok(list.Select(x => x.ToListDto()));
         }
 

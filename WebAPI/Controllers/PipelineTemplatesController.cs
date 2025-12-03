@@ -20,9 +20,12 @@ namespace WebAPI.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] string? q, CancellationToken ct)
+        public async Task<IActionResult> List(
+                    [FromQuery] string? q,
+                    [FromQuery] int? conceptId, // 🔥 YENİ
+                    CancellationToken ct)
         {
-            var list = await _service.ListAsync(User.GetUserId(), q, ct);
+            var list = await _service.ListAsync(User.GetUserId(), q, conceptId, ct);
             return Ok(list.Select(x => x.ToListDto()));
         }
 

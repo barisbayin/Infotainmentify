@@ -15,6 +15,7 @@ namespace Application.Services
         public async Task<IReadOnlyList<Script>> ListAsync(
             int userId,
             int? topicId,
+            int? conceptId, // 🔥 YENİ: Konsept Filtresi
             string? q,
             CancellationToken ct)
         {
@@ -22,10 +23,16 @@ namespace Application.Services
                 predicate: s =>
                     s.AppUserId == userId &&
                     (!topicId.HasValue || s.TopicId == topicId) &&
+                    // 🔥 KRİTİK NOKTA: Konsepti, Topic üzerinden sorguluyoruz
+                    (!conceptId.HasValue || s.Topic.ConceptId == conceptId) &&
                     (string.IsNullOrWhiteSpace(q) || s.Title.Contains(q) || s.Content.Contains(q)),
+
                 orderBy: s => s.CreatedAt,
                 desc: true,
-                include: src => src.Include(s => s.Topic), // Join Topic
+
+                // Topic tablosunu Joinliyoruz ki ConceptId'ye erişebilelim
+                include: src => src.Include(s => s.Topic),
+
                 asNoTracking: true,
                 ct: ct
             );

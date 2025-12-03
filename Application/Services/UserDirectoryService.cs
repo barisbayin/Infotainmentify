@@ -102,4 +102,21 @@ public sealed class UserDirectoryService : IUserDirectoryService
         => Path.Combine(GetVideoPipelineRoot(user, pipelineId), "temp");
 
     public static string SanitizeUsername(string username) { var u = username.Trim().ToLowerInvariant().Replace(' ', '_'); u = Regex.Replace(u, @"[^a-z0-9_]", ""); return string.IsNullOrWhiteSpace(u) ? "user" : u; }
+
+
+    
+    // Implementation (UserDirectoryService.cs)
+    public async Task<string> GetRunDirectoryAsync(int userId, int runId, string subFolder)
+    {
+        // Base path: "wwwroot/users/{userId}/runs/{runId}/{subFolder}"
+        var userRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "users", userId.ToString());
+        var runPath = Path.Combine(userRoot, "runs", runId.ToString(), subFolder);
+
+        if (!Directory.Exists(runPath))
+        {
+            Directory.CreateDirectory(runPath);
+        }
+
+        return await Task.FromResult(runPath);
+    }
 }

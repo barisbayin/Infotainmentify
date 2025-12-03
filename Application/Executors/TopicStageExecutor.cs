@@ -111,7 +111,8 @@ namespace Application.Executors
                 SourcePresetId = preset.Id,
                 CreatedByRunId = run.Id,
                 RawJsonData = responseText, // Ham veriyi sakla, debug için altın değerinde
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                ConceptId = run.Template.ConceptId,
             };
 
             await _topicRepo.AddAsync(topic, ct);

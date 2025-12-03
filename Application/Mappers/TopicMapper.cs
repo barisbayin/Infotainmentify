@@ -22,6 +22,7 @@ namespace Application.Contracts.Mappers
             Title = e.Title,
             Premise = e.Premise,
             LanguageCode = e.LanguageCode,
+            ConceptId = e.ConceptId,
             Category = e.Category,
             SubCategory = e.SubCategory,
             Series = e.Series,

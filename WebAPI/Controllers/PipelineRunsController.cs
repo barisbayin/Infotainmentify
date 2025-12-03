@@ -143,25 +143,32 @@ namespace WebAPI.Controllers
 
         // GET api/pipeline-runs
         [HttpGet]
-        public async Task<IActionResult> List(CancellationToken ct)
+        public async Task<ActionResult<IEnumerable<PipelineRunListDto>>> List(
+                  [FromQuery] int? conceptId, // 🔥 YENİ
+                  CancellationToken ct)
         {
             int userId = User.GetUserId();
+
             var runs = await _runRepo.FindAsync(
-                predicate: r => r.AppUserId == userId,
+                predicate: r =>
+                    r.AppUserId == userId &&
+                    // 🔥 KRİTİK: İlişki üzerinden filtreleme
+                    (!conceptId.HasValue || r.Template.ConceptId == conceptId),
                 orderBy: r => r.CreatedAt,
                 desc: true,
-                include: x => x.Include(r => r.Template), // Template adını almak için
+                include: x => x.Include(r => r.Template),
                 asNoTracking: true,
                 ct: ct
             );
 
-            var dtos = runs.Select(r => new
+            // 🔥 DÜZELTME: Anonymous Object yerine DTO kullandık
+            var dtos = runs.Select(r => new PipelineRunListDto
             {
-                r.Id,
-                TemplateName = r.Template?.Name ?? "Unknown",
+                Id = r.Id,
+                TemplateName = r.Template?.Name ?? "Silinmiş Şablon", // Null check
                 Status = r.Status.ToString(),
-                r.StartedAt,
-                r.CompletedAt
+                StartedAt = r.StartedAt,
+                CompletedAt = r.CompletedAt
             });
 
             return Ok(dtos);

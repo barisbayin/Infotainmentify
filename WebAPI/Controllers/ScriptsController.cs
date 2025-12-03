@@ -1,4 +1,5 @@
 ﻿using Application.Contracts.Script;
+using Application.Contracts.Story;
 using Application.Extensions;
 using Application.Mappers;
 using Application.Services;
@@ -21,9 +22,14 @@ namespace WebAPI.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] int? topicId, [FromQuery] string? q, CancellationToken ct)
+        public async Task<ActionResult<IEnumerable<ScriptListDto>>> List(
+                   [FromQuery] int? topicId,
+                   [FromQuery] int? conceptId, // 🔥 Eklendi
+                   [FromQuery] string? q,
+                   CancellationToken ct)
         {
-            var list = await _service.ListAsync(User.GetUserId(), topicId, q, ct);
+            // Service'e gönderiyoruz
+            var list = await _service.ListAsync(User.GetUserId(), topicId, conceptId, q, ct);
             return Ok(list.Select(x => x.ToListDto()));
         }
 

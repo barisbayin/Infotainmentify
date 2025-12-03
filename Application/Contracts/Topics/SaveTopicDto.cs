@@ -18,6 +18,8 @@ namespace Application.Contracts.Topics
         [MaxLength(10)]
         public string LanguageCode { get; set; } = "tr-TR";
 
+        public int? ConceptId { get; set; }
+
         [MaxLength(64)]
         public string? Category { get; set; }
 
