@@ -14,6 +14,7 @@ namespace Core.Enums
         Anthropic = 3,          // Claude 3 (Harika script yazar)
         DeepSeek = 4,           // Kod ve Text (F/P ürünü)
         AzureOpenAI = 5,        // Kurumsal OpenAI
+        GoogleAIStudio = 6,
 
         // --- GÖRSEL (Ressamlar) ---
         StabilityAI = 20,       // Stable Diffusion

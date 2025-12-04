@@ -14,7 +14,7 @@ using System.Text.Json;
 namespace Application.AiLayer.Concrete
 {
     [AiProvider(AiProviderType.GoogleVertex)] // 👈 Fabrika bunu buradan tanıyacak
-    public class GeminiService : ITextGenerator, IImageGenerator, ITtsGenerator, ISttGenerator
+    public class GoogleVertexService : ITextGenerator, IImageGenerator, ITtsGenerator, ISttGenerator
     {
         private readonly HttpClient _http;
 
@@ -29,7 +29,7 @@ namespace Application.AiLayer.Concrete
 
         public AiProviderType ProviderType => AiProviderType.GoogleVertex;
 
-        public GeminiService(HttpClient http)
+        public GoogleVertexService(HttpClient http)
         {
             _http = http;
             _http.Timeout = TimeSpan.FromMinutes(5); // Video/Resim işlemleri için uzun süre
@@ -141,30 +141,48 @@ namespace Application.AiLayer.Concrete
         // =================================================================
         // 3. IMAGE GENERATION (Imagen on Vertex AI)
         // =================================================================
-        public async Task<byte[]> GenerateImageAsync(string prompt, string? negativePrompt, string size = "1080x1920", string? style = null, string? model = null, CancellationToken ct = default)
+        public async Task<byte[]> GenerateImageAsync(
+            string prompt,
+            string? negativePrompt,
+            string size = "1080x1920",
+            string? style = null,
+            string? model = null,
+            CancellationToken ct = default)
         {
-            // Vertex AI Imagen Endpoint'i (API Key ile değil, Bearer Token ile çalışır)
             var accessToken = await GetAccessTokenAsync(ct);
-            var selectedModel = model ?? "imagegeneration@006"; // Veya "imagen-3.0-generate-001"
 
+            // Varsayılan olarak Imagen 3 veya Imagen 2 modelini kullan
+            var selectedModel = model ?? "imagegeneration@006";
+
+            // DİKKAT: Eğer kullanıcı yanlışlıkla "gemini" modelini seçtiyse, 
+            // burada manuel olarak düzeltelim ki hata almasın.
+            if (selectedModel.ToLower().Contains("gemini"))
+            {
+                // Fallback: Gemini resim çizemez, Imagen'e yönlendir.
+                selectedModel = "imagegeneration@006";
+            }
+
+            // Imagen Endpoint'i (:predict ile biter)
             var url = $"https://us-central1-aiplatform.googleapis.com/v1/projects/{_googleProjectId}/locations/us-central1/publishers/google/models/{selectedModel}:predict";
 
-            var instance = new
-            {
-                prompt = string.IsNullOrWhiteSpace(style) ? prompt : $"{prompt}, {style}",
-                negativePrompt = negativePrompt
-            };
+            // Prompt Hazırlığı
+            var finalPrompt = string.IsNullOrWhiteSpace(style) ? prompt : $"{prompt}, style: {style}";
 
-            var parameters = new
-            {
-                sampleCount = 1,
-                aspectRatio = size == "1080x1920" ? "9:16" : "1:1"
-            };
-
+            // Vertex AI Imagen Payload Yapısı
             var payload = new
             {
-                instances = new[] { instance },
-                parameters = parameters
+                instances = new[]
+                {
+                    new { prompt = finalPrompt }
+                },
+                parameters = new
+                {
+                    sampleCount = 1,
+                    // Aspect Ratio formatı (1:1, 9:16, 16:9)
+                    aspectRatio = size == "1080x1920" ? "9:16" : (size == "1920x1080" ? "16:9" : "1:1"),
+                    // negativePrompt parametresi her modelde olmayabilir ama deneriz
+                    negativePrompt = negativePrompt
+                }
             };
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url);
@@ -175,13 +193,26 @@ namespace Application.AiLayer.Concrete
             var json = await res.Content.ReadAsStringAsync(ct);
 
             if (!res.IsSuccessStatusCode)
-                throw new Exception($"Gemini Image Error: {json}");
+                throw new Exception($"Google Imagen Error ({res.StatusCode}): {json}");
 
-            using var doc = JsonDocument.Parse(json);
-            // Vertex AI response yapısı farklıdır, base64'ü oradan çekiyoruz
-            var base64 = doc.RootElement.GetProperty("predictions")[0].GetProperty("bytesBase64Encoded").GetString();
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                // Yanıt yapısı: predictions[0].bytesBase64Encoded
+                var base64 = doc.RootElement
+                    .GetProperty("predictions")[0]
+                    .GetProperty("bytesBase64Encoded")
+                    .GetString();
 
-            return Convert.FromBase64String(base64!);
+                if (string.IsNullOrWhiteSpace(base64))
+                    throw new Exception("Google Imagen boş veri döndürdü.");
+
+                return Convert.FromBase64String(base64);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Google Imagen response parse hatası: {ex.Message} \nRaw: {json}");
+            }
         }
 
         // =================================================================
