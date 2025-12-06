@@ -218,34 +218,74 @@ namespace Application.AiLayer.Concrete
         // =================================================================
         // 4. TTS GENERATION (Google Cloud TTS - gRPC)
         // =================================================================
-        public async Task<byte[]> GenerateAudioAsync(string text, string voiceName, string languageCode, string modelName, string ratePercent, string pitchString, string audioEncoding = "MP3", CancellationToken ct = default)
+        public async Task<byte[]> GenerateAudioAsync(
+             string text,
+             string voiceName,      // Örn: "tr-TR-Standard-A" veya "en-US-Journey-D"
+             string languageCode,   // Örn: "tr-TR"
+             string modelName,      // Google için boş geçilebilir
+             string ratePercent,    // Örn: "1.2" veya "10%"
+             string pitchString,    // Örn: "2.0" veya "-1.5"
+             string audioEncoding = "MP3",
+             CancellationToken ct = default)
         {
-            if (_ttsClient == null) throw new InvalidOperationException("Google TTS Client başlatılmadı.");
+            if (_ttsClient == null)
+                throw new InvalidOperationException("Google TTS Client başlatılamadı. JSON config hatalı olabilir.");
 
-            // Input
-            var input = text.Trim().StartsWith("<speak")
-                ? new SynthesisInput { Ssml = text }
-                : new SynthesisInput { Text = text };
+            // 1. Girdi Metni (SSML Desteği)
+            // Eğer metin <speak> ile başlıyorsa SSML olarak, yoksa Text olarak algıla
+            var input = new SynthesisInput();
+            if (text.Trim().StartsWith("<speak", StringComparison.OrdinalIgnoreCase))
+                input.Ssml = text;
+            else
+                input.Text = text;
 
-            // Config Parsing (Hız ve Pitch)
-            double rate = ParsePercentage(ratePercent);
-            double pitch = ParsePitch(pitchString);
-
-            // Request
-            var request = new SynthesizeSpeechRequest
+            // 2. Ses Seçimi
+            var voiceSelection = new VoiceSelectionParams
             {
-                Input = input,
-                Voice = new VoiceSelectionParams { Name = voiceName, LanguageCode = languageCode },
-                AudioConfig = new AudioConfig
-                {
-                    AudioEncoding = audioEncoding.ToLower() == "wav" ? AudioEncoding.Linear16 : AudioEncoding.Mp3,
-                    SpeakingRate = rate,
-                    Pitch = pitch
-                }
+                LanguageCode = languageCode,
+                Name = voiceName
             };
 
-            var response = await _ttsClient.SynthesizeSpeechAsync(request, cancellationToken: ct);
-            return response.AudioContent.ToByteArray();
+            // 3. Ses Ayarları (Hız ve Ton)
+            // Google 0.25 ile 4.0 arası hız, -20.0 ile 20.0 arası pitch kabul eder.
+            double rate = ParseDouble(ratePercent, 1.0);
+            double pitch = ParseDouble(pitchString, 0.0);
+
+            var audioConfig = new AudioConfig
+            {
+                AudioEncoding = audioEncoding.ToUpper() == "WAV" ? AudioEncoding.Linear16 : AudioEncoding.Mp3,
+                SpeakingRate = rate,
+                Pitch = pitch,
+                // EffectsProfileId = { "headphone-class-device" } // İstersen ekleyebilirsin
+            };
+
+            // 4. İstek Gönder
+            try
+            {
+                var response = await _ttsClient.SynthesizeSpeechAsync(input, voiceSelection, audioConfig, cancellationToken: ct);
+                return response.AudioContent.ToByteArray();
+            }
+            catch (Exception ex)
+            {
+                // Google bazen 5000 karakter sınırını aşarsan hata verir.
+                // İleride buraya "Chunking" (Bölme) mantığı ekleyebiliriz.
+                throw new Exception($"Google TTS Hatası: {ex.Message}");
+            }
+        }
+
+        // Helper: Güvenli Double Parse
+        private double ParseDouble(string value, double defaultValue)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return defaultValue;
+
+            // "%10" gibi değerleri temizle
+            value = value.Replace("%", "").Trim();
+
+            if (double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out double result))
+            {
+                return result;
+            }
+            return defaultValue;
         }
 
         // =================================================================
@@ -325,6 +365,8 @@ namespace Application.AiLayer.Concrete
         private SpeechToTextResult ParseGoogleSttResponse(RecognizeResponse response)
         {
             var result = new SpeechToTextResult { Transcript = "", Words = new List<WordTimestamp>() };
+
+            // Sonuç boşsa dön
             if (response.Results.Count == 0) return result;
 
             var sb = new StringBuilder();
@@ -340,13 +382,22 @@ namespace Application.AiLayer.Concrete
                     result.Words.Add(new WordTimestamp
                     {
                         Word = w.Word,
-                        Start = w.StartOffset.ToTimeSpan().TotalSeconds,
-                        End = w.EndOffset.ToTimeSpan().TotalSeconds
+                        // 🔥 DÜZELTME: Doğrudan .ToTimeSpan() yerine güvenli metodu kullanıyoruz
+                        Start = SafeSeconds(w.StartOffset),
+                        End = SafeSeconds(w.EndOffset),
+                        Confidence = w.Confidence
                     });
                 }
             }
             result.Transcript = sb.ToString().Trim();
             return result;
+        }
+
+        // 🔥 YENİ HELPER METOD (Null Kontrolü)
+        private double SafeSeconds(Google.Protobuf.WellKnownTypes.Duration? duration)
+        {
+            if (duration == null) return 0.0;
+            return duration.ToTimeSpan().TotalSeconds;
         }
 
         private string StripCodeFences(string text)

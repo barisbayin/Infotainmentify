@@ -155,6 +155,15 @@ namespace Application.Pipeline
 
                 if (result.Success)
                 {
+                    // 🔥 YENİ: Eğer Topic üretildiyse, başlığı Run'a taşı
+                    if (config.StageType == StageType.Topic && result.Output is TopicStagePayload topicPayload)
+                    {
+                        run.RunContextTitle = topicPayload.TopicTitle;
+
+                        // Başlık değiştiği için kaydet
+                        await _uow.SaveChangesAsync(ct);
+                    }
+
                     return true;
                 }
 

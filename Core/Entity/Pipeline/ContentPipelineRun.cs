@@ -6,6 +6,9 @@ namespace Core.Entity.Pipeline
 {
     public class ContentPipelineRun : BaseEntity
     {
+        [MaxLength(1000)]
+        public string? RunContextTitle { get; set; }
+
         [Required]
         public int AppUserId { get; set; }
         // Navigation

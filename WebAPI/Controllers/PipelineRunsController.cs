@@ -134,7 +134,8 @@ namespace WebAPI.Controllers
                         StartedAt = s.StartedAt,
                         FinishedAt = s.FinishedAt,
                         Error = s.Error,
-                        DurationMs = s.DurationMs ?? 0
+                        DurationMs = s.DurationMs ?? 0,
+                        OutputJson = s.OutputJson,
                     }).ToList()
             };
 
@@ -165,6 +166,7 @@ namespace WebAPI.Controllers
             var dtos = runs.Select(r => new PipelineRunListDto
             {
                 Id = r.Id,
+                RunContextTitle = r.RunContextTitle,
                 TemplateName = r.Template?.Name ?? "Silinmiş Şablon", // Null check
                 Status = r.Status.ToString(),
                 StartedAt = r.StartedAt,

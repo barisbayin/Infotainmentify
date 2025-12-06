@@ -70,6 +70,7 @@ namespace WebAPI
             builder.Services.AddScoped<AppUserService>();
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
             builder.Services.AddScoped<IUserDirectoryService, UserDirectoryService>();
+            builder.Services.AddScoped<IVideoRendererService, FFmpegVideoService>();
 
             // --- Content Services (BaseService Türevleri) ---
             builder.Services.AddScoped<ConceptService>();
@@ -203,7 +204,7 @@ namespace WebAPI
                 options.AddPolicy(CorsPolicy, policy =>
                 {
                     var origins = builder.Environment.IsDevelopment()
-                        ? new[] { "http://localhost:5173", "https://localhost:5173" }
+                        ? new[] { "http://localhost:5173", "https://localhost:5173", "http://localhost:5174", "https://localhost:5174" }
                         : new[] { "https://moduleer.com", "https://www.moduleer.com" };
 
                     policy.WithOrigins(origins)
@@ -236,6 +237,17 @@ namespace WebAPI
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+
+            app.UseStaticFiles(); // Standart wwwroot için
+
+            var allFilesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ALL_FILES");
+            if (!Directory.Exists(allFilesPath)) Directory.CreateDirectory(allFilesPath);
+
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(allFilesPath),
+                RequestPath = ""
+            });
 
             app.UseHttpsRedirection();
 

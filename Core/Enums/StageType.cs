@@ -23,6 +23,7 @@ namespace Core.Enums
         Tts = 40,               // Metinden sese (ElevenLabs, Google)
         VoiceClone = 41,        // Ses klonlama işlemi (Özel bir stage olabilir)
         AudioMix = 42,          // Arka plan müziği + Ses birleştirme (Render öncesi hazırlık)
+        Stt = 43,
 
         // --- 4. KURGU VE MONTAJ (Timeline Oluşturma) ---
         // Burası "Hangi saniyede ne girecek?" planını yapan yer.

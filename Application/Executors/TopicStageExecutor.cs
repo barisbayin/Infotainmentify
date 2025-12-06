@@ -124,6 +124,7 @@ namespace Application.Executors
             return new TopicStagePayload
             {
                 TopicId = topic.Id,
+                TopicTitle = topic.Title,
                 TopicText = premise, // Script aşaması bunu kullanacak
                 Language = preset.Language
             };
