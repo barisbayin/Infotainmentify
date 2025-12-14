@@ -202,6 +202,7 @@ namespace Application.Pipeline
                     if (config.StageType == StageType.Topic && result.Output is TopicStagePayload topicPayload)
                     {
                         run.RunContextTitle = topicPayload.TopicTitle;
+                        run.Language = topicPayload.Language;
                         await _uow.SaveChangesAsync(ct);
                     }
 

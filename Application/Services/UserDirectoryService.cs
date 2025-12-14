@@ -120,6 +120,26 @@ public sealed class UserDirectoryService : IUserDirectoryService
         return await Task.FromResult(runPath);
     }
 
-    public string GetDefaultBlackBackground()
+    public async Task<string> GetDefaultBlackBackground()
     => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ALL_FILES", "Assets", "Image" ,"black.png");
+
+    public async Task<string> GetPublicUrl(string physicalPath)
+    {
+        // Gelen Yol: C:\...\ALL_FILES\UserFiles\User_1\runs\Run_10\images\resim.png
+        // Hedef URL: /files/UserFiles/User_1/runs/Run_10/images/resim.png
+
+        var keyword = "ALL_FILES";
+        var index = physicalPath.IndexOf(keyword);
+
+        if (index == -1) return physicalPath; // Hata veya zaten url ise karışma
+
+        // "ALL_FILES" sonrasını al: "\UserFiles\User_1\..."
+        var relativePath = physicalPath.Substring(index + keyword.Length);
+
+        // Windows ters slaşlarını (\) web slaşına (/) çevir
+        var webPath = relativePath.Replace("\\", "/");
+
+        // Başına sanal yolu (/files) ekle
+        return $"/files{webPath}";
+    }
 }

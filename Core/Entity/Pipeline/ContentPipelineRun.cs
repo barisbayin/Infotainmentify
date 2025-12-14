@@ -9,6 +9,8 @@ namespace Core.Entity.Pipeline
         [MaxLength(1000)]
         public string? RunContextTitle { get; set; }
 
+        public string Language { get; set; } = "en-US";
+
         [Required]
         public int AppUserId { get; set; }
         // Navigation

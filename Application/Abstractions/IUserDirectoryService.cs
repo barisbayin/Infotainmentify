@@ -44,6 +44,7 @@ namespace Application.Abstractions
         //yeniler
         Task<string> GetRunDirectoryAsync(int userId, int runId, string subFolder);
 
-        string GetDefaultBlackBackground();
+        Task<string> GetDefaultBlackBackground();
+        Task<string> GetPublicUrl(string physicalPath);
     }
 }

@@ -1,11 +1,10 @@
-﻿using Application.Contracts.Presets;
+﻿using Application.Contracts.Render;
 using Application.Extensions;
+using Application.Mappers;
+using Application.Mappers.PresetMappers;
 using Application.Services.PresetService;
-using Core.Entity.Models;
-using Core.Entity.Presets;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Application.Mappers.PresetMappers;
 
 namespace WebAPI.Controllers
 {
@@ -26,6 +25,8 @@ namespace WebAPI.Controllers
         {
             int userId = User.GetUserId();
             var entities = await _service.GetAllAsync(userId, ct);
+
+            // Mapper Extension Kullanımı: .ToListDto()
             return Ok(entities.Select(e => e.ToListDto()));
         }
 
@@ -35,6 +36,8 @@ namespace WebAPI.Controllers
             int userId = User.GetUserId();
             var entity = await _service.GetByIdAsync(id, userId, ct);
             if (entity == null) return NotFound();
+
+            // Mapper Extension Kullanımı: .ToDetailDto()
             return Ok(entity.ToDetailDto());
         }
 
@@ -43,39 +46,11 @@ namespace WebAPI.Controllers
         {
             int userId = User.GetUserId();
 
-            // DTO -> Entity
-            var entity = new RenderPreset
-            {
-                Name = dto.Name,
-                OutputWidth = dto.OutputWidth,
-                OutputHeight = dto.OutputHeight,
-                Fps = dto.Fps,
-                BitrateKbps = dto.BitrateKbps,
-                ContainerFormat = dto.ContainerFormat,
-            };
-
-            // Helper Property'leri kullanarak JSON'ı otomatik oluşturuyoruz
-            entity.CaptionSettings = new RenderCaptionSettings
-            {
-                EnableCaptions = dto.CaptionSettings.EnableCaptions,
-                FontName = dto.CaptionSettings.FontName,
-                FontSize = dto.CaptionSettings.FontSize,
-                PrimaryColor = dto.CaptionSettings.PrimaryColor,
-                OutlineColor = dto.CaptionSettings.OutlineColor,
-                EnableHighlight = dto.CaptionSettings.EnableHighlight,
-                HighlightColor = dto.CaptionSettings.HighlightColor,
-                MaxWordsPerLine = dto.CaptionSettings.MaxWordsPerLine
-            };
-
-            entity.AudioMixSettings = new RenderAudioMixSettings
-            {
-                VoiceVolumePercent = dto.AudioMixSettings.VoiceVolumePercent,
-                MusicVolumePercent = dto.AudioMixSettings.MusicVolumePercent,
-                EnableDucking = dto.AudioMixSettings.EnableDucking
-            };
+            // 🔥 DTO -> Entity Dönüşümü (TEK SATIR)
+            var entity = dto.ToEntity();
 
             await _service.AddAsync(entity, userId, ct);
-            return Ok(new { id = entity.Id, message = "Render preset created." });
+            return Ok(new { id = entity.Id, message = "Preset created." });
         }
 
         [HttpPut("{id}")]
@@ -85,30 +60,8 @@ namespace WebAPI.Controllers
             var entity = await _service.GetByIdAsync(id, userId, ct);
             if (entity == null) return NotFound();
 
-            entity.Name = dto.Name;
-            entity.OutputWidth = dto.OutputWidth;
-            entity.OutputHeight = dto.OutputHeight;
-            entity.Fps = dto.Fps;
-            entity.BitrateKbps = dto.BitrateKbps;
-            entity.ContainerFormat = dto.ContainerFormat;
-
-            // Update Nested Objects
-            var cap = entity.CaptionSettings; // Mevcutu al
-            cap.EnableCaptions = dto.CaptionSettings.EnableCaptions;
-            cap.FontName = dto.CaptionSettings.FontName;
-            cap.FontSize = dto.CaptionSettings.FontSize;
-            cap.PrimaryColor = dto.CaptionSettings.PrimaryColor;
-            cap.OutlineColor = dto.CaptionSettings.OutlineColor;
-            cap.EnableHighlight = dto.CaptionSettings.EnableHighlight;
-            cap.HighlightColor = dto.CaptionSettings.HighlightColor;
-            cap.MaxWordsPerLine = dto.CaptionSettings.MaxWordsPerLine;
-            entity.CaptionSettings = cap; // Geri ata (JSON güncellensin)
-
-            var aud = entity.AudioMixSettings;
-            aud.VoiceVolumePercent = dto.AudioMixSettings.VoiceVolumePercent;
-            aud.MusicVolumePercent = dto.AudioMixSettings.MusicVolumePercent;
-            aud.EnableDucking = dto.AudioMixSettings.EnableDucking;
-            entity.AudioMixSettings = aud;
+            // 🔥 Entity Güncelleme (TEK SATIR)
+            entity.UpdateEntity(dto);
 
             await _service.UpdateAsync(entity, userId, ct);
             return NoContent();

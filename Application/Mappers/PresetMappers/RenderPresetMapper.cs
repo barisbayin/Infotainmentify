@@ -1,59 +1,75 @@
-﻿using Application.Contracts.Presets;
+﻿using Application.Contracts.Render;
 using Core.Entity.Presets;
 
 namespace Application.Mappers.PresetMappers
 {
     public static class RenderPresetMapper
     {
-        public static RenderPresetListDto ToListDto(this RenderPreset e) => new()
+        // Entity -> ListDto
+        public static RenderPresetListDto ToListDto(this RenderPreset entity)
         {
-            Id = e.Id,
-            Name = e.Name,
-            OutputWidth = e.OutputWidth,
-            OutputHeight = e.OutputHeight,
-            Fps = e.Fps,
-            UpdatedAt = e.UpdatedAt
-        };
+            return new RenderPresetListDto
+            {
+                Id = entity.Id,
+                Name = entity.Name,
+                OutputWidth = entity.OutputWidth,
+                OutputHeight = entity.OutputHeight,
+                Fps = entity.Fps,
+                EncoderPreset = entity.EncoderPreset,
+                UpdatedAt = entity.UpdatedAt
+            };
+        }
 
-        public static RenderPresetDetailDto ToDetailDto(this RenderPreset e)
+        // Entity -> DetailDto
+        public static RenderPresetDetailDto ToDetailDto(this RenderPreset entity)
         {
-            // Entity'deki helper property'lerden veriyi çekiyoruz
-            var cap = e.CaptionSettings;
-            var aud = e.AudioMixSettings;
-
             return new RenderPresetDetailDto
             {
-                Id = e.Id,
-                Name = e.Name,
-                AppUserId = e.AppUserId,
-                OutputWidth = e.OutputWidth,
-                OutputHeight = e.OutputHeight,
-                Fps = e.Fps,
-                BitrateKbps = e.BitrateKbps,
-                ContainerFormat = e.ContainerFormat,
+                Id = entity.Id,
+                Name = entity.Name,
+                OutputWidth = entity.OutputWidth,
+                OutputHeight = entity.OutputHeight,
+                Fps = entity.Fps,
+                BitrateKbps = entity.BitrateKbps,
+                ContainerFormat = entity.ContainerFormat,
+                EncoderPreset = entity.EncoderPreset,
 
-                // Nested Mapping
-                CaptionSettings = new RenderCaptionSettingsDto
-                {
-                    EnableCaptions = cap.EnableCaptions,
-                    FontName = cap.FontName,
-                    FontSize = cap.FontSize,
-                    PrimaryColor = cap.PrimaryColor,
-                    OutlineColor = cap.OutlineColor,
-                    EnableHighlight = cap.EnableHighlight,
-                    HighlightColor = cap.HighlightColor,
-                    MaxWordsPerLine = cap.MaxWordsPerLine
-                },
-                AudioMixSettings = new RenderAudioMixSettingsDto
-                {
-                    VoiceVolumePercent = aud.VoiceVolumePercent,
-                    MusicVolumePercent = aud.MusicVolumePercent,
-                    EnableDucking = aud.EnableDucking
-                },
+                // Helper Property'lerden (JSON) okur
+                CaptionSettings = entity.CaptionSettings,
+                AudioMixSettings = entity.AudioMixSettings,
+                VisualEffectsSettings = entity.VisualEffectsSettings, // Yeni
+                BrandingSettings = entity.BrandingSettings,           // Yeni
 
-                CreatedAt = e.CreatedAt,
-                UpdatedAt = e.UpdatedAt
+                CreatedAt = entity.CreatedAt,
+                UpdatedAt = entity.UpdatedAt
             };
+        }
+
+        // DTO -> Entity (Create)
+        public static RenderPreset ToEntity(this SaveRenderPresetDto dto)
+        {
+            var entity = new RenderPreset();
+            // Ortak atama metodunu çağır
+            entity.UpdateEntity(dto);
+            return entity;
+        }
+
+        // DTO -> Entity (Update)
+        public static void UpdateEntity(this RenderPreset entity, SaveRenderPresetDto dto)
+        {
+            entity.Name = dto.Name;
+            entity.OutputWidth = dto.OutputWidth;
+            entity.OutputHeight = dto.OutputHeight;
+            entity.Fps = dto.Fps;
+            entity.BitrateKbps = dto.BitrateKbps;
+            entity.ContainerFormat = dto.ContainerFormat;
+            entity.EncoderPreset = dto.EncoderPreset;
+
+            // Helper Property set edince JSON string güncellenir
+            entity.CaptionSettings = dto.CaptionSettings;
+            entity.AudioMixSettings = dto.AudioMixSettings;
+            entity.VisualEffectsSettings = dto.VisualEffectsSettings;
+            entity.BrandingSettings = dto.BrandingSettings;
         }
     }
 }

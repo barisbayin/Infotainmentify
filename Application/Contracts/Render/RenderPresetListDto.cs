@@ -1,6 +1,5 @@
-﻿namespace Application.Contracts.Presets
+﻿namespace Application.Contracts.Render
 {
-    // LIST
     public class RenderPresetListDto
     {
         public int Id { get; set; }
@@ -8,6 +7,7 @@
         public int OutputWidth { get; set; }
         public int OutputHeight { get; set; }
         public int Fps { get; set; }
+        public string EncoderPreset { get; set; } = default!;
         public DateTime? UpdatedAt { get; set; }
     }
 }

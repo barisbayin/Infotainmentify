@@ -84,5 +84,16 @@ namespace Core.Entity.Presets
                    : JsonSerializer.Deserialize<RenderVisualEffectsSettings>(VisualEffectsSettingsJson)!;
             set => VisualEffectsSettingsJson = JsonSerializer.Serialize(value);
         }
+
+        [NotMapped]
+        public RenderBrandingSettings BrandingSettings // 🔥 YENİ
+        {
+            get => DeserializeOrNew<RenderBrandingSettings>(BrandingSettingsJson);
+            set => BrandingSettingsJson = JsonSerializer.Serialize(value);
+        }
+
+        // Helper
+        private T DeserializeOrNew<T>(string? json) where T : new()
+            => string.IsNullOrEmpty(json) ? new T() : JsonSerializer.Deserialize<T>(json)!;
     }
 }

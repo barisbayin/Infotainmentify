@@ -56,6 +56,8 @@ namespace Application.Executors
             // 3. Kayıt Klasörü Hazırla
             var outputDir = await _dirService.GetRunDirectoryAsync(run.AppUserId, run.Id, "images");
 
+   
+
             var results = new List<SceneImageItem>();
             int successCount = 0;
 

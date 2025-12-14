@@ -2,6 +2,7 @@
 {
     public class SceneLayoutStagePayload
     {
+        // Video Teknik Özellikleri
         public int Width { get; set; }
         public int Height { get; set; }
         public int Fps { get; set; }
@@ -16,6 +17,7 @@
         // Altyazı Timeline (Burn-in Captions)
         public List<CaptionEvent> CaptionTrack { get; set; } = new();
 
+        // 🔥 GÜNCELLENEN KISIM: Tüm stil ayarlarını tutan kapsayıcı
         public RenderStyleSettings Style { get; set; } = new();
     }
 }

@@ -1,17 +1,19 @@
-﻿namespace Application.Models
+﻿using Core.Entity.Models;
+
+namespace Application.Models
 {
+    // Bu sınıf önceden sadece basit int/string tutuyordu.
+    // Şimdi Preset içindeki detaylı objeleri taşıyacak.
     public class RenderStyleSettings
     {
-        // Altyazı
-        public int FontSize { get; set; } = 30;
-        public string FontColor { get; set; } = "&H00FFFFFF"; // Beyaz
+        // 1. Teknik Ayarlar (FFmpeg Encoder)
+        public int BitrateKbps { get; set; }
+        public string EncoderPreset { get; set; } = "medium";
 
-        // Video Teknik
-        public int BitrateKbps { get; set; } = 6000;
-        public string EncoderPreset { get; set; } = "medium"; // ultrafast, medium, slow
-
-        // Ses
-        public double MusicVolume { get; set; } = 0.15; // 0.0 - 1.0 arası
-        public bool IsDuckingEnabled { get; set; } = true;
+        // 2. Detaylı Ayar Grupları (Core katmanındaki modelleri direkt kullanıyoruz)
+        public RenderCaptionSettings CaptionSettings { get; set; } = new();
+        public RenderAudioMixSettings AudioMixSettings { get; set; } = new();
+        public RenderVisualEffectsSettings VisualEffectsSettings { get; set; } = new();
+        public RenderBrandingSettings BrandingSettings { get; set; } = new(); // 🔥 Yeni Watermark Ayarı
     }
 }

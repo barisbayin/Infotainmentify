@@ -74,11 +74,15 @@ namespace Application.Executors
                 // Style Settings
                 Style = new RenderStyleSettings
                 {
+                    // Teknik
                     BitrateKbps = renderPreset.BitrateKbps,
                     EncoderPreset = renderPreset.EncoderPreset,
-                    FontSize = capSettings.FontSize > 0 ? capSettings.FontSize : 30,
-                    MusicVolume = (audioSettings.MusicVolumePercent > 0 ? audioSettings.MusicVolumePercent : 15) / 100.0,
-                    IsDuckingEnabled = audioSettings.EnableDucking
+
+                    // Gruplar (Helper property'ler sayesinde JSON parse edilmiş olarak gelir)
+                    CaptionSettings = renderPreset.CaptionSettings,
+                    AudioMixSettings = renderPreset.AudioMixSettings,
+                    VisualEffectsSettings = renderPreset.VisualEffectsSettings,
+                    BrandingSettings = renderPreset.BrandingSettings
                 }
             };
 
@@ -120,7 +124,7 @@ namespace Application.Executors
                     else
                     {
                         // Plan B: Default black background for the first scene
-                        currentImagePath = _dir.GetDefaultBlackBackground();
+                        currentImagePath = await _dir.GetDefaultBlackBackground();
                     }
                 }
 

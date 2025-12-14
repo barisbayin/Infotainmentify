@@ -59,7 +59,7 @@ namespace Application.Executors
 
             try
             {
-                var finalPath = await _videoService.RenderVideoAsync(layout, outputPath, ct);
+                var finalPath = await _videoService.RenderVideoAsync(layout, outputPath, run.Language, ct);
 
                 var fileInfo = new FileInfo(finalPath);
                 double sizeMb = fileInfo.Length / (1024.0 * 1024.0);

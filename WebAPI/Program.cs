@@ -75,6 +75,7 @@ namespace WebAPI
             builder.Services.AddScoped<IContentPipelineRunner, ContentPipelineRunner>();
             builder.Services.AddScoped<IContentPipelineService, ContentPipelineService>();
             builder.Services.AddScoped<INotifierService, SignalRNotifierService>();
+            builder.Services.AddScoped<IAssetService, AssetService>();
 
             // --- Content Services (BaseService Türevleri) ---
             builder.Services.AddScoped<ConceptService>();
