@@ -12,6 +12,8 @@ namespace Application.Abstractions
             StageConfig config,
             StageExecution execution,
             PipelineContext context,
-            CancellationToken ct);
+            CancellationToken ct, 
+            Func<string, Task>? logCallback = null);
+        Task<object?> ProcessAsync(ContentPipelineRun run, StageConfig config, StageExecution exec, PipelineContext context, object? presetObj, Func<string, Task> logAsync, CancellationToken ct);
     }
 }

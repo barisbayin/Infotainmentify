@@ -1,12 +1,8 @@
 ﻿using Application.Contracts.Pipeline;
 using Application.Extensions;
-using Application.Pipeline;
-using Core.Contracts;
-using Core.Entity.Pipeline;
-using Core.Enums;
+using Application.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace WebAPI.Controllers
 {
@@ -15,165 +11,84 @@ namespace WebAPI.Controllers
     [Authorize]
     public class PipelineRunsController : ControllerBase
     {
-        private readonly IServiceProvider _sp; // 🔥 YENİ EKLENDİ
-        private readonly IRepository<ContentPipelineTemplate> _templateRepo;
-        private readonly IRepository<ContentPipelineRun> _runRepo;
-        private readonly IUnitOfWork _uow;
+        private readonly IContentPipelineService _pipelineService;
 
-        public PipelineRunsController(
-            IServiceProvider sp, // 🔥 YENİ EKLENDİ
-            IRepository<ContentPipelineTemplate> templateRepo,
-            IRepository<ContentPipelineRun> runRepo,
-            IUnitOfWork uow)
+        public PipelineRunsController(IContentPipelineService pipelineService)
         {
-            _sp = sp;
-            _templateRepo = templateRepo;
-            _runRepo = runRepo;
-            _uow = uow;
+            _pipelineService = pipelineService;
         }
 
         // CREATE
         [HttpPost]
         public async Task<IActionResult> CreateRun([FromBody] CreatePipelineRunRequest request, CancellationToken ct)
         {
-            int userId = User.GetUserId();
-
-            // ... (Template kontrolü ve Run kaydı aynı) ...
-            var template = await _templateRepo.FirstOrDefaultAsync(t => t.Id == request.TemplateId && t.AppUserId == userId, asNoTracking: true, ct: ct);
-            if (template == null) return NotFound("Template not found.");
-
-            var run = new ContentPipelineRun
+            try
             {
-                AppUserId = userId,
-                TemplateId = request.TemplateId,
-                Status = ContentPipelineStatus.Pending,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _runRepo.AddAsync(run, ct);
-            await _uow.SaveChangesAsync(ct);
-
-            if (request.AutoStart)
-            {
-                // 🔥 FIX: Scope Oluşturma
-                // Arka plan işlemi olduğu için yeni bir scope lazım.
-                _ = Task.Run(async () =>
-                {
-                    using var scope = _sp.CreateScope();
-                    var runner = scope.ServiceProvider.GetRequiredService<ContentPipelineRunner>();
-                    try
-                    {
-                        await runner.RunAsync(run.Id, CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[BACKGROUND ERROR] Run #{run.Id}: {ex}");
-                        // Hata loglaması buraya
-                    }
-                });
+                int userId = User.GetUserId();
+                int runId = await _pipelineService.CreateRunAsync(userId, request, ct);
+                return Ok(new { RunId = runId, Message = "Pipeline created." });
             }
-
-            return Ok(new { RunId = run.Id, Message = "Pipeline created and started." });
+            catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
         }
 
         // START
         [HttpPost("{id}/start")]
         public async Task<IActionResult> StartRun(int id, CancellationToken ct)
         {
-            int userId = User.GetUserId();
-            var run = await _runRepo.GetByIdAsync(id, asNoTracking: true, ct);
-
-            if (run == null || run.AppUserId != userId) return NotFound();
-            if (run.Status == ContentPipelineStatus.Running) return BadRequest("Already running.");
-
-            // 🔥 FIX: Scope Oluşturma
-            _ = Task.Run(async () =>
+            try
             {
-                using var scope = _sp.CreateScope();
-                var runner = scope.ServiceProvider.GetRequiredService<ContentPipelineRunner>();
-                await runner.RunAsync(run.Id, CancellationToken.None);
-            });
-
-            return Ok(new { Message = "Execution started." });
+                int userId = User.GetUserId();
+                await _pipelineService.StartRunAsync(userId, id, ct);
+                return Ok(new { Message = "Execution started." });
+            }
+            catch (KeyNotFoundException) { return NotFound(); }
+            catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         }
 
-        // ============================================================
-        // GET DETAILS (Polling / İlerleme Çubuğu)
-        // ============================================================
+        // GET DETAILS
         [HttpGet("{id}")]
         public async Task<ActionResult<PipelineRunDetailDto>> GetRunDetails(int id, CancellationToken ct)
         {
             int userId = User.GetUserId();
+            var result = await _pipelineService.GetRunDetailsAsync(userId, id, ct);
 
-            // İlişkileri yükleyerek çekiyoruz
-            var run = await _runRepo.FirstOrDefaultAsync(
-                predicate: r => r.Id == id && r.AppUserId == userId,
-                include: src => src
-                    .Include(r => r.StageExecutions)
-                    .ThenInclude(se => se.StageConfig), // Config üzerinden sıralama yapacağız
-                asNoTracking: true,
-                ct: ct
-            );
-
-            if (run == null) return NotFound();
-
-            // DTO Mapping
-            var dto = new PipelineRunDetailDto
-            {
-                Id = run.Id,
-                Status = run.Status.ToString(),
-                StartedAt = run.StartedAt,
-                CompletedAt = run.CompletedAt,
-                ErrorMessage = run.ErrorMessage,
-                Stages = run.StageExecutions
-                    .OrderBy(x => x.StageConfig.Order) // Sıraya diz
-                    .Select(s => new PipelineStageDto
-                    {
-                        StageType = s.StageConfig.StageType.ToString(),
-                        Status = s.Status.ToString(),
-                        StartedAt = s.StartedAt,
-                        FinishedAt = s.FinishedAt,
-                        Error = s.Error,
-                        DurationMs = s.DurationMs ?? 0,
-                        OutputJson = s.OutputJson,
-                    }).ToList()
-            };
-
-            return Ok(dto);
+            if (result == null) return NotFound();
+            return Ok(result);
         }
 
-        // GET api/pipeline-runs
+        // LIST
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<PipelineRunListDto>>> List(
-                  [FromQuery] int? conceptId, // 🔥 YENİ
-                  CancellationToken ct)
+        public async Task<ActionResult<IEnumerable<PipelineRunListDto>>> List([FromQuery] int? conceptId, CancellationToken ct)
         {
             int userId = User.GetUserId();
+            var results = await _pipelineService.ListRunsAsync(userId, conceptId, ct);
+            return Ok(results);
+        }
 
-            var runs = await _runRepo.FindAsync(
-                predicate: r =>
-                    r.AppUserId == userId &&
-                    // 🔥 KRİTİK: İlişki üzerinden filtreleme
-                    (!conceptId.HasValue || r.Template.ConceptId == conceptId),
-                orderBy: r => r.CreatedAt,
-                desc: true,
-                include: x => x.Include(r => r.Template),
-                asNoTracking: true,
-                ct: ct
-            );
-
-            // 🔥 DÜZELTME: Anonymous Object yerine DTO kullandık
-            var dtos = runs.Select(r => new PipelineRunListDto
+        // RETRY
+        [HttpPost("{id}/retry/{stageType}")]
+        public async Task<IActionResult> RetryStage(int id, string stageType, CancellationToken ct)
+        {
+            try
             {
-                Id = r.Id,
-                RunContextTitle = r.RunContextTitle,
-                TemplateName = r.Template?.Name ?? "Silinmiş Şablon", // Null check
-                Status = r.Status.ToString(),
-                StartedAt = r.StartedAt,
-                CompletedAt = r.CompletedAt
-            });
+                int userId = User.GetUserId();
+                await _pipelineService.RetryStageAsync(userId, id, stageType, ct);
+                return Ok(new { message = $"{stageType} tekrar kuyruğa alındı." });
+            }
+            catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
 
-            return Ok(dtos);
+        // LOGS
+        [HttpGet("{id}/logs")]
+        public async Task<IActionResult> GetRunLogs(int id)
+        {
+            // Loglar genelde herkese açıksa ID yeterli, kullanıcı kontrolü servis içinde de yapılabilir ama log okuma genelde güvenlidir.
+            var logs = await _pipelineService.GetRunLogsAsync(id);
+            if (logs == null || !logs.Any()) return Ok(new List<string>()); // Boş liste dön
+
+            return Ok(logs);
         }
     }
 }

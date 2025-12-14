@@ -10,6 +10,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Application.AiLayer.Concrete
 {
@@ -168,6 +169,14 @@ namespace Application.AiLayer.Concrete
             // Prompt Hazırlığı
             var finalPrompt = string.IsNullOrWhiteSpace(style) ? prompt : $"{prompt}, style: {style}";
 
+            var safetySettings = new[]
+            {
+                new { category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_ONLY_HIGH" },
+                new { category = "HARM_CATEGORY_HATE_SPEECH", threshold = "BLOCK_ONLY_HIGH" },
+                new { category = "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold = "BLOCK_ONLY_HIGH" },
+                new { category = "HARM_CATEGORY_DANGEROUS_CONTENT", threshold = "BLOCK_ONLY_HIGH" }
+            };
+
             // Vertex AI Imagen Payload Yapısı
             var payload = new
             {
@@ -182,7 +191,8 @@ namespace Application.AiLayer.Concrete
                     aspectRatio = size == "1080x1920" ? "9:16" : (size == "1920x1080" ? "16:9" : "1:1"),
                     // negativePrompt parametresi her modelde olmayabilir ama deneriz
                     negativePrompt = negativePrompt
-                }
+                },
+                safetySettings = safetySettings
             };
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url);
@@ -194,24 +204,59 @@ namespace Application.AiLayer.Concrete
 
             if (!res.IsSuccessStatusCode)
                 throw new Exception($"Google Imagen Error ({res.StatusCode}): {json}");
-
             try
             {
                 using var doc = JsonDocument.Parse(json);
-                // Yanıt yapısı: predictions[0].bytesBase64Encoded
-                var base64 = doc.RootElement
-                    .GetProperty("predictions")[0]
-                    .GetProperty("bytesBase64Encoded")
-                    .GetString();
+                var root = doc.RootElement;
 
+                // 1. ÖNCE GÜVENLİK/SANSÜR KONTROLÜ (Gemini/Imagen 3 Yapısı)
+                // "candidates" dizisi var mı diye güvenli bir şekilde (TryGetProperty) bakıyoruz.
+                if (root.TryGetProperty("candidates", out JsonElement candidates) &&
+                    candidates.ValueKind == JsonValueKind.Array &&
+                    candidates.GetArrayLength() > 0)
+                {
+                    var firstCandidate = candidates[0];
+
+                    // "finishReason" var mı? Varsa değeri "NO_IMAGE" mi?
+                    if (firstCandidate.TryGetProperty("finishReason", out JsonElement finishReason))
+                    {
+                        string reasonStr = finishReason.GetString();
+                        if (reasonStr == "NO_IMAGE" || reasonStr == "SAFETY")
+                        {
+                            // 🔥 YAKALADIK! Sansüre takıldı.
+                            throw new Exception($"Google Safety Filter Triggered. FinishReason: {reasonStr}. Prompt sansüre takıldı.");
+                        }
+                    }
+                }
+
+                // 2. RESİM VERİSİNİ ALMA (Imagen 2 / Legacy Yapısı)
+                // Kod buraya geldiyse sansür yok demektir. Şimdi "predictions" arayalım.
+                string base64 = null;
+
+                if (root.TryGetProperty("predictions", out JsonElement predictions) &&
+                    predictions.ValueKind == JsonValueKind.Array &&
+                    predictions.GetArrayLength() > 0)
+                {
+                    // predictions[0].bytesBase64Encoded var mı?
+                    if (predictions[0].TryGetProperty("bytesBase64Encoded", out JsonElement bytesElement))
+                    {
+                        base64 = bytesElement.GetString();
+                    }
+                }
+
+                // 3. SON KONTROL
                 if (string.IsNullOrWhiteSpace(base64))
-                    throw new Exception("Google Imagen boş veri döndürdü.");
+                {
+                    // Hem sansür hatası yok hem de resim verisi yoksa, JSON yapısı beklenmedik bir şekildedir.
+                    throw new Exception("Google Imagen boş veri döndürdü veya bilinmeyen bir format algılandı.");
+                }
 
                 return Convert.FromBase64String(base64);
             }
             catch (Exception ex)
             {
-                throw new Exception($"Google Imagen response parse hatası: {ex.Message} \nRaw: {json}");
+                // Hata detayını ve gelen JSON'ı logluyoruz ki ne olduğunu görelim
+                throw new Exception($"Google Imagen response parse hatası: {ex.Message} \nRaw Response: {json}");
             }
         }
 
@@ -219,57 +264,80 @@ namespace Application.AiLayer.Concrete
         // 4. TTS GENERATION (Google Cloud TTS - gRPC)
         // =================================================================
         public async Task<byte[]> GenerateAudioAsync(
-             string text,
-             string voiceName,      // Örn: "tr-TR-Standard-A" veya "en-US-Journey-D"
-             string languageCode,   // Örn: "tr-TR"
-             string modelName,      // Google için boş geçilebilir
-             string ratePercent,    // Örn: "1.2" veya "10%"
-             string pitchString,    // Örn: "2.0" veya "-1.5"
-             string audioEncoding = "MP3",
-             CancellationToken ct = default)
+            string text,
+            string voiceName,
+            string languageCode,
+            string modelName,
+            string ratePercent,
+            string pitchString,
+            string audioEncoding = "MP3",
+            CancellationToken ct = default)
         {
             if (_ttsClient == null)
-                throw new InvalidOperationException("Google TTS Client başlatılamadı. JSON config hatalı olabilir.");
+                throw new InvalidOperationException("Google TTS Client başlatılamadı.");
 
-            // 1. Girdi Metni (SSML Desteği)
-            // Eğer metin <speak> ile başlıyorsa SSML olarak, yoksa Text olarak algıla
-            var input = new SynthesisInput();
-            if (text.Trim().StartsWith("<speak", StringComparison.OrdinalIgnoreCase))
-                input.Ssml = text;
+            // 🕵️‍♂️ 1. SES TİPİ TESPİTİ
+            // Journey sesleri çok hassastır. SSML, Hız ve Pitch ayarlarını sevmezler.
+            bool isJourney = voiceName.Contains("Journey", StringComparison.OrdinalIgnoreCase) ||
+                             voiceName.Contains("Generative", StringComparison.OrdinalIgnoreCase);
+
+            // 🧹 2. METİN HAZIRLIĞI
+            var processedText = text.Trim();
+            SynthesisInput input;
+
+            if (isJourney)
+            {
+                // 🔥 JOURNEY İÇİN GÜVENLİ MOD:
+                // SSML YOK. Break tagleri YOK. Sadece saf metin.
+                // Eğer metin <speak> ile başlıyorsa temizle.
+                if (processedText.StartsWith("<speak", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Basitçe tagleri söküyoruz (Regex veya substring ile daha temiz yapılabilir ama şimdilik yeterli)
+                    processedText = processedText.Replace("<speak>", "").Replace("</speak>", "").Replace("<break time=\"250ms\"/>", "");
+                }
+
+                // Journey düz metin sever
+                input = new SynthesisInput { Text = processedText };
+            }
             else
-                input.Text = text;
+            {
+                // STANDART SESLER (Neural2, Wavenet):
+                // Nefes payı (SSML) ekleyebiliriz.
+                if (!processedText.StartsWith("<speak", StringComparison.OrdinalIgnoreCase))
+                {
+                    var safeText = System.Security.SecurityElement.Escape(processedText);
+                    processedText = $@"<speak><break time=""250ms""/>{safeText}</speak>";
+                }
+                input = new SynthesisInput { Ssml = processedText };
+            }
 
-            // 2. Ses Seçimi
+            // ⚙️ 3. AYARLAR
             var voiceSelection = new VoiceSelectionParams
             {
                 LanguageCode = languageCode,
                 Name = voiceName
             };
 
-            // 3. Ses Ayarları (Hız ve Ton)
-            // Google 0.25 ile 4.0 arası hız, -20.0 ile 20.0 arası pitch kabul eder.
-            double rate = ParseDouble(ratePercent, 1.0);
-            double pitch = ParseDouble(pitchString, 0.0);
-
             var audioConfig = new AudioConfig
             {
                 AudioEncoding = audioEncoding.ToUpper() == "WAV" ? AudioEncoding.Linear16 : AudioEncoding.Mp3,
-                SpeakingRate = rate,
-                Pitch = pitch,
-                // EffectsProfileId = { "headphone-class-device" } // İstersen ekleyebilirsin
+                // Journey ise Hız: 1.0, Pitch: 0.0 ZORUNLU. Değilse ayarlardan gelen.
+                SpeakingRate = isJourney ? 1.0 : ParseDouble(ratePercent, 1.0),
+                Pitch = isJourney ? 0.0 : ParseDouble(pitchString, 0.0)
             };
 
-            // 4. İstek Gönder
+            // 🚀 4. GÖNDERİM
             try
             {
                 var response = await _ttsClient.SynthesizeSpeechAsync(input, voiceSelection, audioConfig, cancellationToken: ct);
                 return response.AudioContent.ToByteArray();
             }
-            catch (Exception ex)
+            catch (Google.GoogleApiException ex)
             {
-                // Google bazen 5000 karakter sınırını aşarsan hata verir.
-                // İleride buraya "Chunking" (Bölme) mantığı ekleyebiliriz.
-                throw new Exception($"Google TTS Hatası: {ex.Message}");
+                // Hatayı detaylandırıp fırlat ki tam sebebini görelim
+                var errorMsg = $"Google TTS Hatası ({ex.HttpStatusCode}): {ex.Message} | Voice: {voiceName} | Mode: {(isJourney ? "Journey" : "Standard")}";
+                Console.WriteLine(errorMsg);
+                throw new Exception(errorMsg);
             }
         }
 

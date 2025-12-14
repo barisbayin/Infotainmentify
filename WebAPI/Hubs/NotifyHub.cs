@@ -35,6 +35,25 @@ namespace WebAPI.Hubs
 
             await base.OnDisconnectedAsync(exception);
         }
+
+        public async Task JoinRunGroup(string runId)
+        {
+            // Güvenlik: İstersen burada "Bu run gerçekten bu user'a mı ait?" kontrolü yapabilirsin.
+            // Şimdilik basit tutalım. Group ismini "run-1066" yapıyoruz karışmasın diye.
+            string groupName = $"run-{runId}";
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+
+            // Debug için konsola yazalım
+            Console.WriteLine($"✅ User joined log group: {groupName}");
+        }
+
+        // Frontend: "Ben sayfadan çıktım, artık izlemiyorum" der.
+        public async Task LeaveRunGroup(string runId)
+        {
+            string groupName = $"run-{runId}";
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        }
     }
 }
 

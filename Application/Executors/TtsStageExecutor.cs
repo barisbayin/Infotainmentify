@@ -28,16 +28,20 @@ namespace Application.Executors
 
         public override StageType StageType => StageType.Tts;
 
+        // 🔥 DÜZELTME 1: 'protected override' yaptık ve logAsync'i ekledik
         public override async Task<object?> ProcessAsync(
             ContentPipelineRun run,
             StageConfig config,
             StageExecution exec,
             PipelineContext context,
             object? presetObj,
+            Func<string, Task> logAsync, // 🔥 Canlı Log Fonksiyonu
             CancellationToken ct)
         {
             var preset = (TtsPreset)presetObj!;
-            exec.AddLog($"Starting TTS with preset: {preset.Name} ({preset.VoiceId})");
+
+            // 🔥 DÜZELTME 2: exec.AddLog -> logAsync
+            await logAsync($"🗣️ Starting TTS (Text-to-Speech) with preset: {preset.Name} ({preset.VoiceId})");
 
             // 1. Script Verisini Çek
             var scriptData = context.GetOutput<ScriptStagePayload>(StageType.Script);
@@ -45,7 +49,6 @@ namespace Application.Executors
                 throw new InvalidOperationException("Script verisi bulunamadı.");
 
             // 2. AI İstemcisi
-            // Not: ResolveTtsClientAsync metodunu kullanıyoruz
             var ttsClient = await _aiFactory.ResolveTtsClientAsync(run.AppUserId, preset.UserAiConnectionId, ct);
 
             // 3. Klasör Hazırla
@@ -53,6 +56,8 @@ namespace Application.Executors
 
             var results = new List<SceneAudioItem>();
             int successCount = 0;
+
+            await logAsync($"Found {scriptData.Scenes.Count} scenes to synthesize.");
 
             // 4. Döngü: Her sahne için ses üret
             foreach (var scene in scriptData.Scenes)
@@ -62,23 +67,22 @@ namespace Application.Executors
                 // Eğer seslendirilecek metin yoksa atla
                 if (string.IsNullOrWhiteSpace(scene.AudioText))
                 {
-                    exec.AddLog($"Scene {scene.SceneNumber}: No audio text, skipping.");
+                    await logAsync($"⚠️ Scene {scene.SceneNumber}: No audio text, skipping.");
                     continue;
                 }
 
-                exec.AddLog($"Generating audio for Scene {scene.SceneNumber} ({scene.AudioText.Length} chars)...");
+                await logAsync($"🔊 Generating audio for Scene {scene.SceneNumber} ({scene.AudioText.Length} chars)...");
 
                 try
                 {
                     // AI Çağrısı (Byte Array döner)
-                    // Hız, Pitch gibi ayarlar preset'ten geliyor
                     var audioBytes = await ttsClient.GenerateAudioAsync(
                         text: scene.AudioText,
                         voiceName: preset.VoiceId,
                         languageCode: preset.LanguageCode,
                         modelName: preset.EngineModel ?? "",
-                        ratePercent: FormatRate(preset.SpeakingRate), // Google "1.2" ister
-                        pitchString: FormatPitch(preset.Pitch),       // Google "2.0" ister
+                        ratePercent: FormatRate(preset.SpeakingRate),
+                        pitchString: FormatPitch(preset.Pitch),
                         audioEncoding: "MP3",
                         ct: ct
                     );
@@ -97,20 +101,23 @@ namespace Application.Executors
                     });
 
                     successCount++;
-                    exec.AddLog($"Scene {scene.SceneNumber} audio ready.");
+                    await logAsync($"✅ Scene {scene.SceneNumber} audio ready.");
                 }
                 catch (Exception ex)
                 {
-                    exec.AddLog($"ERROR Scene {scene.SceneNumber}: {ex.Message}");
+                    // Hata logu
+                    await logAsync($"❌ ERROR Scene {scene.SceneNumber}: {ex.Message}");
                     // Hata olsa da devam et (Diğer sahneler üretilsin)
                 }
 
-                // Rate limit koruması (Opsiyonel)
+                // Rate limit koruması
                 await Task.Delay(500, ct);
             }
 
             if (successCount == 0)
                 throw new Exception("Hiçbir ses dosyası üretilemedi.");
+
+            await logAsync($"🎉 TTS Completed. Total Files: {successCount}");
 
             return new TtsStagePayload
             {
@@ -120,7 +127,6 @@ namespace Application.Executors
         }
 
         // --- Helpers ---
-        // Google/Azure formatlarına uyum sağlamak için basit dönüştürücüler
         private string FormatRate(double rate) => rate.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         private string FormatPitch(double pitch) => pitch.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
     }

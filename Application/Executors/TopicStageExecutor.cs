@@ -35,35 +35,39 @@ namespace Application.Executors
 
         public override StageType StageType => StageType.Topic;
 
+        // 🔥 FIX 1: Changed to 'protected override' and added 'logAsync'
         public override async Task<object?> ProcessAsync(
             ContentPipelineRun run,
             StageConfig config,
             StageExecution exec,
             PipelineContext context,
             object? presetObj,
+            Func<string, Task> logAsync, // <--- Live Logging Function
             CancellationToken ct)
         {
             var preset = (TopicPreset)presetObj!;
-            exec.AddLog($"Starting Topic Generation via {preset.ModelName}...");
 
-            // 1. AI İstemcisini Hazırla
+            // 🔥 FIX 2: Using logAsync instead of exec.AddLog
+            await logAsync($"💡 Starting Topic Generation via {preset.ModelName}...");
+
+            // 1. Prepare AI Client
             var aiClient = await _aiFactory.ResolveTextClientAsync(run.AppUserId, preset.UserAiConnectionId, ct);
 
-            // 2. Prompt Hazırlığı (Sistem Talimatı + Kullanıcı İsteği)
-            // AI'yı JSON dönmeye zorluyoruz.
+            // 2. Prepare Prompt (System + User)
             var systemInstruction = preset.SystemInstruction +
                                     "\nIMPORTANT: Return ONLY a raw JSON object (no markdown, no code fences) with these fields: 'Title', 'Premise', 'Category', 'VisualIdea'.";
 
             var userPrompt = preset.PromptTemplate;
 
-            // Varsa Context Keywordlerini ekle
+            // Add Context Keywords if available
             if (!string.IsNullOrEmpty(preset.ContextKeywordsJson))
             {
                 userPrompt += $"\nKeywords/Context: {preset.ContextKeywordsJson}";
             }
 
-            // 3. AI Çağrısı
-            exec.AddLog("Sending request to AI...");
+            // 3. Call AI
+            await logAsync("🤖 Sending request to AI...");
+
             var responseText = await aiClient.GenerateTextAsync(
                 prompt: $"{systemInstruction}\n\nUser Request: {userPrompt}",
                 temperature: preset.Temperature,
@@ -71,9 +75,9 @@ namespace Application.Executors
                 ct: ct
             );
 
-            exec.AddLog("AI response received.");
+            await logAsync("✨ AI response received. Processing...");
 
-            // 4. JSON Parse (Akıllı Deneme)
+            // 4. Parse JSON (Smart Try)
             string title = "Untitled Topic";
             string premise = responseText;
             string? category = null;
@@ -81,7 +85,7 @@ namespace Application.Executors
 
             try
             {
-                // Markdown temizliği (Bazen ```json ... ``` döner)
+                // Clean Markdown (e.g. ```json ... ```)
                 var cleanJson = responseText.Replace("```json", "").Replace("```", "").Trim();
 
                 using var doc = JsonDocument.Parse(cleanJson);
@@ -94,12 +98,12 @@ namespace Application.Executors
             }
             catch
             {
-                exec.AddLog("Warning: AI response was not valid JSON. Using raw text as premise.");
-                // Parse edemezsek tüm metni Premise olarak kabul ederiz, Title'ı özetleriz.
+                await logAsync("⚠️ Warning: AI response was not valid JSON. Using raw text as premise.");
+                // Fallback: Use full text as premise, truncate for title
                 title = responseText.Length > 50 ? responseText.Substring(0, 47) + "..." : responseText;
             }
 
-            // 5. DB'ye Kayıt (Topic Kütüphanesi)
+            // 5. Save to DB (Topic Library)
             var topic = new Topic
             {
                 AppUserId = run.AppUserId,
@@ -110,7 +114,7 @@ namespace Application.Executors
                 LanguageCode = preset.Language,
                 SourcePresetId = preset.Id,
                 CreatedByRunId = run.Id,
-                RawJsonData = responseText, // Ham veriyi sakla, debug için altın değerinde
+                RawJsonData = responseText, // Save raw data for debugging
                 CreatedAt = DateTime.UtcNow,
                 ConceptId = run.Template.ConceptId,
             };
@@ -118,14 +122,14 @@ namespace Application.Executors
             await _topicRepo.AddAsync(topic, ct);
             await _uow.SaveChangesAsync(ct);
 
-            exec.AddLog($"Topic saved to DB. ID: {topic.Id}");
+            await logAsync($"✅ Topic saved to DB. ID: {topic.Id} - '{title}'");
 
-            // 6. Sonraki Aşamaya Veri Aktarımı
+            // 6. Return Payload for Next Stage
             return new TopicStagePayload
             {
                 TopicId = topic.Id,
                 TopicTitle = topic.Title,
-                TopicText = premise, // Script aşaması bunu kullanacak
+                TopicText = premise, // Script stage will use this
                 Language = preset.Language
             };
         }

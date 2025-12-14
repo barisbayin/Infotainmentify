@@ -14,7 +14,7 @@ namespace Application.Executors
     public class ImageStageExecutor : BaseStageExecutor
     {
         private readonly IAiGeneratorFactory _aiFactory;
-        private readonly IUserDirectoryService _dirService; // Dosya kaydetmek için
+        private readonly IUserDirectoryService _dirService;
 
         public ImageStageExecutor(
             IServiceProvider sp,
@@ -28,47 +28,45 @@ namespace Application.Executors
 
         public override StageType StageType => StageType.Image;
 
+        // 🔥 DÜZELTME 1: Access Modifier 'protected override' olmalı (Base sınıf öyle istiyor)
         public override async Task<object?> ProcessAsync(
             ContentPipelineRun run,
             StageConfig config,
             StageExecution exec,
             PipelineContext context,
             object? presetObj,
+            Func<string, Task> logAsync, // 🔥 Bu fonksiyonu kullanacağız
             CancellationToken ct)
         {
             var preset = (ImagePreset)presetObj!;
-            exec.AddLog($"Starting Image Generation with preset: {preset.Name} ({preset.ModelName})");
+
+            // 🔥 DÜZELTME 2: exec.AddLog yerine logAsync kullanıyoruz
+            await logAsync($"🎨 Starting Image Generation with preset: {preset.Name} ({preset.ModelName})");
 
             // 1. Önceki Adımdan (Script) Veriyi Çek
             var scriptData = context.GetOutput<ScriptStagePayload>(StageType.Script);
             if (scriptData == null || scriptData.Scenes == null || !scriptData.Scenes.Any())
                 throw new InvalidOperationException("Script verisi bulunamadı veya sahneler boş.");
 
-            exec.AddLog($"Found {scriptData.Scenes.Count} scenes to visualize.");
+            await logAsync($"Found {scriptData.Scenes.Count} scenes to visualize.");
 
             // 2. AI İstemcisi
             var aiClient = await _aiFactory.ResolveImageClientAsync(run.AppUserId, preset.UserAiConnectionId, ct);
 
             // 3. Kayıt Klasörü Hazırla
-            // Örn: /users/1/runs/105/images/
             var outputDir = await _dirService.GetRunDirectoryAsync(run.AppUserId, run.Id, "images");
 
             var results = new List<SceneImageItem>();
-
-            // 4. Döngü (Sahneleri işle)
-            // Not: DALL-E rate limit'e takılmamak için 'Semaphore' ile eşzamanlılığı sınırlayabilirsin.
-            // Şimdilik basit foreach ile gidelim (Sıralı).
-
             int successCount = 0;
 
+            // 4. Döngü (Sahneleri işle)
             foreach (var scene in scriptData.Scenes)
             {
                 if (ct.IsCancellationRequested) break;
 
-                exec.AddLog($"Generating image for Scene {scene.SceneNumber}...");
+                await logAsync($"🖌️ Generating image for Scene {scene.SceneNumber}...");
 
                 // Prompt Hazırla
-                // Şablon: "{SceneDescription}, style of {ArtStyle}"
                 var finalPrompt = preset.PromptTemplate
                     .Replace("{SceneDescription}", scene.VisualPrompt)
                     .Replace("{ArtStyle}", preset.ArtStyle ?? "cinematic")
@@ -76,11 +74,11 @@ namespace Application.Executors
 
                 try
                 {
-                    // AI Çağrısı (Byte Array döner)
+                    // AI Çağrısı
                     var imageBytes = await aiClient.GenerateImageAsync(
                         prompt: finalPrompt,
                         negativePrompt: preset.NegativePrompt,
-                        size: preset.Size, // "1024x1792"
+                        size: preset.Size,
                         style: preset.ArtStyle,
                         model: preset.ModelName,
                         ct: ct
@@ -100,13 +98,25 @@ namespace Application.Executors
                     });
 
                     successCount++;
-                    exec.AddLog($"Scene {scene.SceneNumber} ready: {fileName}");
+                    // Başarılı log
+                    await logAsync($"✅ Scene {scene.SceneNumber} ready: {fileName}");
                 }
                 catch (Exception ex)
                 {
-                    exec.AddLog($"ERROR Scene {scene.SceneNumber}: {ex.Message}");
-                    // Hata olsa bile devam edelim mi? 
-                    // Şimdilik devam ediyoruz, eksik resimle render yapılmaz ama logda görünsün.
+                    var errorMsg = $"❌ Scene {scene.SceneNumber} generation failed. Error: {ex.Message}";
+
+                    // Güvenlik filtresi uyarısı
+                    if (ex.Message.Contains("safety") || ex.Message.Contains("content") || ex.Message.Contains("NO_IMAGE"))
+                    {
+                        errorMsg += " [OLASI SEBEP: Prompt içindeki yasaklı kelimeler (die, blood, shave vb.)]";
+                    }
+
+                    // Hata logunu canlıya bas
+                    await logAsync(errorMsg);
+
+                    // Not: Burası catch bloğu olduğu için BaseExecutor zaten bu exception'ı yakalamayacak 
+                    // (çünkü biz burada yuttuk ve logladık). Eğer sahneyi atlayıp devam etmek istiyorsak
+                    // 'throw' demeden devam ediyoruz. (Fallback mantığı için)
                 }
 
                 // API'yi boğmamak için minik bekleme
@@ -124,5 +134,4 @@ namespace Application.Executors
             };
         }
     }
-
 }

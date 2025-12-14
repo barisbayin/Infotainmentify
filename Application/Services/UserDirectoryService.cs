@@ -109,7 +109,7 @@ public sealed class UserDirectoryService : IUserDirectoryService
     public async Task<string> GetRunDirectoryAsync(int userId, int runId, string subFolder)
     {
         // Base path: "wwwroot/users/{userId}/runs/{runId}/{subFolder}"
-        var userRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ALL_FILES", "User_" + userId.ToString());
+        var userRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ALL_FILES", "UserFiles", "User_" + userId.ToString());
         var runPath = Path.Combine(userRoot, "runs", "Run_" + runId.ToString(), subFolder);
 
         if (!Directory.Exists(runPath))
@@ -119,4 +119,7 @@ public sealed class UserDirectoryService : IUserDirectoryService
 
         return await Task.FromResult(runPath);
     }
+
+    public string GetDefaultBlackBackground()
+    => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ALL_FILES", "Assets", "Image" ,"black.png");
 }

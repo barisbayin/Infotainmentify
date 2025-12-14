@@ -84,6 +84,14 @@ namespace Application.AiLayer.Concrete
                 _ => "1:1"
             };
 
+            var safetySettings = new[]
+            {
+                new { category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_ONLY_HIGH" },
+                new { category = "HARM_CATEGORY_HATE_SPEECH", threshold = "BLOCK_ONLY_HIGH" },
+                new { category = "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold = "BLOCK_ONLY_HIGH" },
+                new { category = "HARM_CATEGORY_DANGEROUS_CONTENT", threshold = "BLOCK_ONLY_HIGH" }
+            };
+
             var payload = new
             {
                 contents = new[]
@@ -105,7 +113,8 @@ namespace Application.AiLayer.Concrete
                                 aspectRatio = aspectRatio
                             },
                             temperature = 0.8
-                        }
+                        },
+                        safetySettings = safetySettings
             };
 
             var res = await _http.PostAsJsonAsync(url, payload, ct);

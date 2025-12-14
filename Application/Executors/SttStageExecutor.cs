@@ -16,9 +16,6 @@ namespace Application.Executors
     {
         private readonly IAiGeneratorFactory _aiFactory;
 
-        // Ses süresini ölçmek için bir servis (Yoksa aşağıda basitçe halledeceğiz)
-        // private readonly IMediaInfoService _mediaService; 
-
         public SttStageExecutor(
             IServiceProvider sp,
             IAiGeneratorFactory aiFactory)
@@ -29,18 +26,22 @@ namespace Application.Executors
 
         public override StageType StageType => StageType.Stt;
 
+        // 🔥 DÜZELTME 1: 'protected override' yaptık ve logAsync'i ekledik
         public override async Task<object?> ProcessAsync(
             ContentPipelineRun run,
             StageConfig config,
             StageExecution exec,
             PipelineContext context,
             object? presetObj,
+            Func<string, Task> logAsync, // 🔥 Canlı Log Fonksiyonu
             CancellationToken ct)
         {
             var preset = (SttPreset)presetObj!;
-            exec.AddLog($"Starting STT with preset: {preset.Name}");
 
-            // 1. TTS Çıktısını Al (Ses dosyalarının yolları lazım)
+            // 🔥 DÜZELTME 2: exec.AddLog -> logAsync
+            await logAsync($"🎧 Starting STT (Speech-to-Text) with preset: {preset.Name}");
+
+            // 1. TTS Çıktısını Al
             var ttsPayload = context.GetOutput<TtsStagePayload>(StageType.Tts);
             if (ttsPayload == null || !ttsPayload.SceneAudios.Any())
                 throw new InvalidOperationException("TTS verisi bulunamadı. Önce ses üretmelisiniz.");
@@ -59,18 +60,18 @@ namespace Application.Executors
 
                 if (!File.Exists(audioItem.AudioFilePath))
                 {
-                    exec.AddLog($"Warning: Audio file not found for Scene {audioItem.SceneNumber}");
+                    await logAsync($"⚠️ Warning: Audio file not found for Scene {audioItem.SceneNumber}");
                     continue;
                 }
 
-                exec.AddLog($"Transcribing Scene {audioItem.SceneNumber}...");
+                await logAsync($"🗣️ Transcribing Scene {audioItem.SceneNumber}...");
 
                 try
                 {
                     // Dosyayı oku
                     var audioBytes = await File.ReadAllBytesAsync(audioItem.AudioFilePath, ct);
 
-                    // A) STT Çağrısı (Metni ve zamanları al)
+                    // A) STT Çağrısı
                     var sttResult = await sttClient.SpeechToTextAsync(
                         audioData: audioBytes,
                         languageCode: preset.LanguageCode,
@@ -78,21 +79,24 @@ namespace Application.Executors
                         ct: ct
                     );
 
-                    // B) Ses Süresini Bul (Offset için kritik!)
+                    // B) Ses Süresini Bul
                     double durationSec = GetAudioDuration(audioItem.AudioFilePath);
-                    exec.AddLog($"Audio Duration: {durationSec:F2}s");
 
-                    // C) Builder'a Ekle (Hesaplama)
+                    // C) Builder'a Ekle
+                    // (Önceki sahnelerin sürelerini toplayarak offset ekleyen bir yapı)
                     subBuilder.AddScene(sttResult.Words, audioItem.SceneNumber, durationSec);
 
                     successCount++;
+                    // Log
+                    await logAsync($"✅ Scene {audioItem.SceneNumber} transcribed. Words: {sttResult.Words.Count}");
                 }
                 catch (Exception ex)
                 {
-                    exec.AddLog($"ERROR Scene {audioItem.SceneNumber}: {ex.Message}");
+                    // Hata logu
+                    await logAsync($"❌ ERROR Scene {audioItem.SceneNumber}: {ex.Message}");
                 }
 
-                // Rate limit beklemesi
+                // Rate limit
                 await Task.Delay(500, ct);
             }
 
@@ -100,7 +104,7 @@ namespace Application.Executors
                 throw new Exception("Hiçbir altyazı üretilemedi.");
 
             var finalSubtitles = subBuilder.Build();
-            exec.AddLog($"STT Completed. Total Words: {finalSubtitles.Count}");
+            await logAsync($"🎉 STT Completed. Total Words: {finalSubtitles.Count}");
 
             return new SttStagePayload
             {
@@ -114,22 +118,12 @@ namespace Application.Executors
         {
             try
             {
-                // YÖNTEM 1: NAudio (Eğer paket yüklüyse bunu aç)
-
                 using var reader = new AudioFileReader(filePath);
                 return reader.TotalTime.TotalSeconds;
-
-
-                // YÖNTEM 2: Dosya boyutundan tahmin (MP3 için kaba hesap)
-                // 1 saniye ~ 16KB (128kbps mono için). Çok güvenilir değildir ama iş görür.
-                // Gerçek projede FFmpeg veya NAudio şart.
-                //var info = new FileInfo(filePath);
-                // 128kbps = 16000 bytes/sec yaklaşık
-                //return info.Length / 16000.0;
             }
             catch
             {
-                // Fallback: 5 saniye varsayalım (Render'da düzeltilir)
+                // Fallback
                 return 5.0;
             }
         }

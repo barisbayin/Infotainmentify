@@ -18,10 +18,11 @@ namespace Application.Executors.Mock
             StageExecution exec,
             PipelineContext context,
             object? presetObj,
+            Func<string, Task> logAsync,
             CancellationToken ct)
         {
             // 1. Sanki AI düşünüyor...
-            exec.AddLog("Mock AI: Analiz yapılıyor...");
+            await logAsync("Mock AI: Analiz yapılıyor...");
             await Task.Delay(1500, ct); // 1.5 saniye bekle
 
             exec.AddLog("Mock AI: Trendler taranıyor...");

@@ -1,81 +1,119 @@
-﻿using Application.Executors;
+﻿using Application.Abstractions;
+using Application.Executors;
 using Application.Models;
 using Core.Contracts;
 using Core.Entity.Pipeline;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 
 namespace Application.Pipeline
 {
-    public class ContentPipelineRunner
+    public class ContentPipelineRunner : IContentPipelineRunner
     {
         private readonly IRepository<ContentPipelineRun> _pipelineRepo;
-        // StageExecution repo'su şart değil, run.StageExecutions üzerinden gidebiliriz ama kalsın.
         private readonly IRepository<StageExecution> _stageExecRepo;
         private readonly StageExecutorFactory _executorFactory;
         private readonly IUnitOfWork _uow;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly INotifierService _notifier; // 🔥 SignalR Servisimiz
 
-        // Retry Politikası
         private const int MaxRetryCount = 3;
 
         public ContentPipelineRunner(
             IRepository<ContentPipelineRun> pipelineRepo,
             IRepository<StageExecution> stageExecRepo,
             StageExecutorFactory executorFactory,
-            IUnitOfWork uow)
+            IUnitOfWork uow,
+            IServiceScopeFactory scopeFactory,
+            INotifierService notifier)
         {
             _pipelineRepo = pipelineRepo;
             _stageExecRepo = stageExecRepo;
             _executorFactory = executorFactory;
             _uow = uow;
+            _scopeFactory = scopeFactory;
+            _notifier = notifier;
         }
 
-        // ----------------------------
-        // PIPELINE RUN ENTRY POINT
-        // ----------------------------
+        // -----------------------------------------------------------------------
+        // 🔥 HELPER: Merkezi Loglama (Hem DB hem SignalR)
+        // -----------------------------------------------------------------------
+        private async Task LogAsync(StageExecution exec, string message)
+        {
+            // 1. Veritabanına kaydet (Kalıcılık)
+            exec.AddLog(message);
+
+            // 2. SignalR ile canlı terminale gönder (Anlık İzleme)
+            try
+            {
+                await _notifier.SendLogAsync(exec.ContentPipelineRunId, message);
+            }
+            catch
+            {
+                // SignalR hatası ana akışı bozmasın (Fire & Forget)
+            }
+        }
+
+        // -----------------------------------------------------------------------
+        // 🚀 MAIN RUN METHOD
+        // -----------------------------------------------------------------------
         public async Task RunAsync(int pipelineRunId, CancellationToken ct)
         {
-            // Include'lar önemli! Template ve Config'leri çekmemiz lazım.
-            // (Repository yapına göre Include syntax'ın değişebilir)
+            // 1. Run verisini ve ilişkili tabloları çek
             var run = await _pipelineRepo.FirstOrDefaultAsync(
                     predicate: r => r.Id == pipelineRunId,
                     include: source => source
                         .Include(r => r.Template)
-                            .ThenInclude(t => t.StageConfigs) // 🔥 KRİTİK NOKTA: Template'in içindeki Config'leri de al!
-                        .Include(r => r.StageExecutions),     // Run'ın kendi executionları
-                    asNoTracking: false, // Değişiklik yapacağız, tracking açık olsun
+                            .ThenInclude(t => t.StageConfigs)
+                        .Include(r => r.StageExecutions),
+                    asNoTracking: false,
                     ct: ct
                 );
 
-            // Eğer Repository include desteklemiyorsa burada manuel yüklemen gerekebilir.
-            // run.Template.StageConfigs'e ihtiyacımız var.
+            if (run == null) throw new InvalidOperationException("Pipeline run bulunamadı.");
 
-            if (run == null)
-                throw new InvalidOperationException("Pipeline run bulunamadı.");
+            // Zaten bitmişse tekrar çalıştırma
+            if (run.Status == ContentPipelineStatus.Completed) return;
 
-            if (run.Status == ContentPipelineStatus.Completed)
-                return;
-
+            // Durumu güncelle ve kaydet
             run.Status = ContentPipelineStatus.Running;
-            run.StartedAt ??= DateTime.UtcNow; // Best practice: UtcNow
-
+            run.StartedAt ??= DateTime.UtcNow;
             await _uow.SaveChangesAsync(ct);
 
-            // 🔥 1. HAFIZAYI OLUŞTUR (CONTEXT)
-            var context = new PipelineContext(run);
+            // Başlangıç Logu
+            await _notifier.SendLogAsync(run.Id, "🚀 Pipeline execution started...");
 
-            // Sıralamayı garantiye al (Config'leri çekiyoruz)
-            // Not: run.Template.StageConfigs null gelirse include eksiktir!
-            var stages = run.Template.StageConfigs
-                .OrderBy(s => s.Order)
-                .ToList();
+            // Context oluştur ve sıralamayı al
+            var context = new PipelineContext(run);
+            var stages = run.Template.StageConfigs.OrderBy(s => s.Order).ToList();
 
             foreach (var stageConfig in stages)
             {
-                // Mevcut Execution var mı?
+                // Hafızadaki listeden execution kaydını bul
                 var exec = run.StageExecutions.FirstOrDefault(x => x.StageConfigId == stageConfig.Id);
 
+                // --- [CRITICAL] REFRESH LOGIC (Ghost Run Önleme) ---
+                // Eğer exec varsa, veritabanından TAZE durumunu çekip hafızadaki nesneyi güncelliyoruz.
+                if (exec != null)
+                {
+                    var freshExec = await _stageExecRepo.FirstOrDefaultAsync(
+                        predicate: x => x.Id == exec.Id,
+                        asNoTracking: true, // Cache delmek için
+                        ct: ct
+                    );
+
+                    if (freshExec != null)
+                    {
+                        exec.Status = freshExec.Status;
+                        exec.RetryCount = freshExec.RetryCount;
+                        exec.OutputJson = freshExec.OutputJson;
+                    }
+                }
+                // ----------------------------------------------------
+
+                // Eğer hiç yoksa oluştur (İlk çalışma)
                 if (exec == null)
                 {
                     exec = new StageExecution
@@ -85,29 +123,29 @@ namespace Application.Pipeline
                         Status = StageStatus.Pending
                     };
                     run.StageExecutions.Add(exec);
-                    await _uow.SaveChangesAsync(ct); // Log oluşsun
+                    await _uow.SaveChangesAsync(ct);
                 }
 
-                // --- RESUME / HYDRATION MANTIĞI ---
-                // Eğer stage zaten bitmişse, tekrar çalıştırma AMA verisini hafızaya yükle!
+                // EĞER TAMAMLANMIŞSA -> Context'i doldur ve geç
                 if (exec.Status == StageStatus.Completed)
                 {
-                    // ⚠️ KRİTİK: Bir sonraki stage bu veriye ihtiyaç duyabilir.
-                    // Veritabanındaki JSON'ı alıp Context'e nesne olarak geri koymalıyız.
                     HydrateContext(context, stageConfig.StageType, exec.OutputJson);
+                    // İstersen burayı da loglayabilirsin ama çok kalabalık etmesin diye kapalı
+                    // await LogAsync(exec, $"⏩ Stage {stageConfig.StageType} already completed. Loading context...");
                     continue;
                 }
 
-                // Permanent Fail kontrolü
+                // EĞER ÖLMÜŞSE (PermanentlyFailed) -> Tüm Run'ı durdur
                 if (exec.Status == StageStatus.PermanentlyFailed)
                 {
                     run.Status = ContentPipelineStatus.Failed;
-                    run.ErrorMessage = $"Stage permanently failed: {stageConfig.StageType}";
+                    run.ErrorMessage = $"Pipeline stopped because stage failed: {stageConfig.StageType}";
                     await _uow.SaveChangesAsync(ct);
+                    await _notifier.SendLogAsync(run.Id, $"❌ Pipeline stopped. Stage {stageConfig.StageType} is marked as failed.");
                     return;
                 }
 
-                // 🔥 2. ÇALIŞTIR (Context'i gönderiyoruz)
+                // 🔥 STAGE ÇALIŞTIR 🔥
                 var success = await ExecuteStageAsync(run, stageConfig, exec, context, ct);
 
                 if (!success)
@@ -115,95 +153,106 @@ namespace Application.Pipeline
                     run.Status = ContentPipelineStatus.Failed;
                     run.ErrorMessage = exec.Error;
                     await _uow.SaveChangesAsync(ct);
+                    await _notifier.SendLogAsync(run.Id, $"❌ Pipeline Failed at {stageConfig.StageType}.");
                     return;
                 }
             }
 
-            // Tüm stage'ler tamam
+            // Hepsi başarıyla bitti
             run.Status = ContentPipelineStatus.Completed;
             run.CompletedAt = DateTime.UtcNow;
-
             await _uow.SaveChangesAsync(ct);
+
+            // Bitiş Logu
+            await _notifier.SendLogAsync(run.Id, "✅ Pipeline execution completed successfully! 🎉");
         }
 
-        // -----------------------------
-        // TEK BİR STAGE ÇALIŞTIRMA
-        // -----------------------------
+        // -----------------------------------------------------------------------
+        // ⚙️ EXECUTE STAGE (Retry & Error Handling)
+        // -----------------------------------------------------------------------
         private async Task<bool> ExecuteStageAsync(
             ContentPipelineRun run,
             StageConfig config,
             StageExecution exec,
-            PipelineContext context, // <--- YENİ PARAMETRE
+            PipelineContext context,
             CancellationToken ct)
         {
             var executor = _executorFactory.Resolve(config.StageType);
 
-            exec.AddLog($"Starting stage {config.StageType}...");
+            await LogAsync(exec, $"▶️ Starting stage: {config.StageType}...");
 
             for (int attempt = 0; attempt <= MaxRetryCount; attempt++)
             {
                 if (attempt > 0)
                 {
-                    exec.Status = StageStatus.Retrying; // Enum ile yönetmek daha güvenli
+                    exec.Status = StageStatus.Retrying;
                     exec.RetryCount = attempt;
-                    exec.AddLog($"Retry attempt {attempt}/{MaxRetryCount}...");
+                    await LogAsync(exec, $"⚠️ Retry attempt {attempt}/{MaxRetryCount} for {config.StageType}...");
                     await _uow.SaveChangesAsync(ct);
                 }
 
-                // 🔥 3. EXECUTOR'A CONTEXT VER
+                // Executor'ı çalıştır
+                // Not: Executor içindeki loglar, eğer executor LogAsync kullanmıyorsa SignalR'a düşmez.
+                // İleride Executorlara da loglama yeteneği verebilirsin.
                 var result = await executor.ExecuteAsync(run, config, exec, context, ct);
 
                 if (result.Success)
                 {
-                    // 🔥 YENİ: Eğer Topic üretildiyse, başlığı Run'a taşı
+                    // Topic aşaması özel durumu (Run başlığını güncelle)
                     if (config.StageType == StageType.Topic && result.Output is TopicStagePayload topicPayload)
                     {
                         run.RunContextTitle = topicPayload.TopicTitle;
-
-                        // Başlık değiştiği için kaydet
                         await _uow.SaveChangesAsync(ct);
                     }
 
+                    await LogAsync(exec, $"✅ Stage {config.StageType} completed.");
                     return true;
                 }
 
-                // Fail olduysa logla
-                exec.AddLog($"Attempt {attempt} failed: {result.Error}");
+                // Hata Durumu
+                await LogAsync(exec, $"❌ Attempt {attempt} failed: {result.Error}");
 
-                // Retry limiti doldu mu?
+                // Retry Limiti Doldu mu?
                 if (attempt == MaxRetryCount)
                 {
                     exec.Status = StageStatus.PermanentlyFailed;
                     exec.Error = result.Error ?? "Unknown error";
                     await _uow.SaveChangesAsync(ct);
+                    await LogAsync(exec, $"💀 Stage {config.StageType} PERMANENTLY FAILED. Giving up.");
                     return false;
                 }
 
-                // Ufak bir bekleme (backoff) iyi olur
+                // Backoff (Bekleme)
                 await Task.Delay(1000 * (attempt + 1), ct);
             }
 
             return false;
         }
 
-        // -----------------------------
-        // 🧠 HAFIZA TAZELEME (HYDRATION)
-        // -----------------------------
+        // -----------------------------------------------------------------------
+        // 🧠 HYDRATION (Reflection ile Context Doldurma)
+        // -----------------------------------------------------------------------
         private void HydrateContext(PipelineContext context, StageType type, string? json)
         {
             if (string.IsNullOrEmpty(json)) return;
 
             try
             {
-                // Burası biraz manuel map'leme gerektiriyor.
-                // Çünkü JSON string'in hangi class olduğunu StageType'tan anlıyoruz.
-                object? data = type switch
+                // Hedef sınıf adını tahmin et: "ScriptStagePayload" vb.
+                var className = $"{type}StagePayload";
+
+                // Projedeki tipleri tara ve bul
+                var targetType = typeof(ContentPipelineRunner).Assembly.GetTypes()
+                    .FirstOrDefault(t => t.Name.Equals(className, StringComparison.OrdinalIgnoreCase));
+
+                if (targetType == null)
                 {
-                    StageType.Topic => JsonSerializer.Deserialize<TopicStagePayload>(json),
-                    StageType.Script => JsonSerializer.Deserialize<string>(json), // Script düz string dönüyorsa
-                    // StageType.Image => JsonSerializer.Deserialize<ImageResultPayload>(json),
-                    _ => null // Bilinmeyen tipler için
-                };
+                    // Kritik hata değil ama loglamak iyidir (SignalR yerine Console'a basıyoruz burayı)
+                    Console.WriteLine($"[Warning] Hydration Type Not Found: {className}");
+                    return;
+                }
+
+                var data = JsonSerializer.Deserialize(json, targetType);
 
                 if (data != null)
                 {
@@ -212,9 +261,67 @@ namespace Application.Pipeline
             }
             catch (Exception ex)
             {
-                // Resume sırasında eski veri bozuksa yapacak çok bir şey yok, logla devam et.
-                Console.WriteLine($"Hydration failed for {type}: {ex.Message}");
+                Console.WriteLine($"Hydration Error ({type}): {ex.Message}");
             }
+        }
+
+        // -----------------------------------------------------------------------
+        // 🔁 RETRY LOGIC (Arka Plan Görevi)
+        // -----------------------------------------------------------------------
+        public async Task RetryStageAsync(int runId, string stageTypeStr, CancellationToken ct)
+        {
+            if (!Enum.TryParse<StageType>(stageTypeStr, true, out var typeEnum))
+                throw new ArgumentException($"Geçersiz aşama türü: {stageTypeStr}");
+
+            // 1. Run'ı ve ilgili Stage'i çek
+            var run = await _pipelineRepo.FirstOrDefaultAsync(
+                predicate: r => r.Id == runId,
+                asNoTracking: false,
+                ct: ct,
+                include: source => source
+                    .Include(r => r.StageExecutions)
+                        .ThenInclude(se => se.StageConfig)
+            );
+
+            if (run == null) throw new KeyNotFoundException("Run bulunamadı.");
+
+            var stageExec = run.StageExecutions.FirstOrDefault(x => x.StageConfig.StageType == typeEnum);
+            if (stageExec == null) throw new KeyNotFoundException($"Run içinde '{stageTypeStr}' aşaması yok.");
+
+            // 2. Sicili Temizle (Reset)
+            stageExec.Status = StageStatus.Pending;
+            stageExec.Error = null;
+            stageExec.RetryCount = 0;
+
+            // Run durumu Failed ise tekrar Running'e çek
+            if (run.Status == ContentPipelineStatus.Failed || run.Status == ContentPipelineStatus.Completed)
+            {
+                run.Status = ContentPipelineStatus.Running;
+                run.ErrorMessage = null;
+            }
+
+            await _uow.SaveChangesAsync(ct);
+            await _notifier.SendLogAsync(run.Id, $"🔄 Retry requested for stage: {stageTypeStr}. Resetting status...");
+
+            // 3. Arka Planda Yeniden Başlat (Fire & Forget)
+            // Concurrency (Eşzamanlılık) hatası olmasın diye kısa bekleme
+            await Task.Delay(200);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var runner = scope.ServiceProvider.GetRequiredService<IContentPipelineRunner>();
+
+                    // Yeni scope ile temiz bir başlangıç
+                    await runner.RunAsync(runId, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Background Retry Failed: {ex.Message}");
+                }
+            });
         }
     }
 }

@@ -1,115 +1,161 @@
-﻿using Application.Models;
+﻿using Application.Abstractions;
+using Application.Models;
 using Application.Pipeline;
 using Core.Attributes;
 using Core.Contracts;
 using Core.Entity.Pipeline;
 using Core.Entity.Presets;
 using Core.Enums;
+using NAudio.Wave;
 
 namespace Application.Executors
 {
     [StageExecutor(StageType.SceneLayout)]
-    // Bu aşamanın kendine ait bir Preset tablosu yok, RenderPreset kullanır.
-    // Ancak StageConfig'de PresetId genellikle RenderPresetId'ye işaret eder.
+    // This stage uses RenderPreset for configuration
     public class SceneLayoutStageExecutor : BaseStageExecutor
     {
         private readonly IRepository<RenderPreset> _renderPresetRepo;
+        private readonly IUserDirectoryService _dir;
 
         public SceneLayoutStageExecutor(
             IServiceProvider sp,
-            IRepository<RenderPreset> renderPresetRepo)
+            IRepository<RenderPreset> renderPresetRepo,
+            IUserDirectoryService userDirectoryService)
             : base(sp)
         {
             _renderPresetRepo = renderPresetRepo;
+            _dir = userDirectoryService;
         }
 
         public override StageType StageType => StageType.SceneLayout;
 
+        // 🔥 FIX 1: Changed to 'protected override' and added 'logAsync' parameter
         public override async Task<object?> ProcessAsync(
             ContentPipelineRun run,
             StageConfig config,
             StageExecution exec,
             PipelineContext context,
-            object? presetObj, // Burası null gelebilir, manuel çekeceğiz
+            object? presetObj,
+            Func<string, Task> logAsync, // <--- Live Logging Function
             CancellationToken ct)
         {
-            exec.AddLog("Building Scene Layout (Timeline)...");
+            // 🔥 FIX 2: Using logAsync instead of exec.AddLog
+            await logAsync("📐 Building Scene Layout (Timeline)...");
 
-            // 1. Girdileri Topla
+            // 1. Collect Inputs
             var scriptData = context.GetOutput<ScriptStagePayload>(StageType.Script);
             var imageData = context.GetOutput<ImageStagePayload>(StageType.Image);
             var ttsData = context.GetOutput<TtsStagePayload>(StageType.Tts);
 
-            // STT Opsiyonel (Altyazı istenmemiş olabilir)
+            // STT is Optional
             SttStagePayload? sttData = null;
             try { sttData = context.GetOutput<SttStagePayload>(StageType.Stt); } catch { }
 
-            // 2. Render Ayarlarını (Preset) Çek
-            // StageConfig'deki PresetId, RenderPreset tablosunu işaret ediyor olmalı.
+            // 2. Load Render Settings (Preset)
             if (!config.PresetId.HasValue)
-                throw new InvalidOperationException("SceneLayout için bir Render Preset seçilmemiş.");
+                throw new InvalidOperationException("No Render Preset selected for SceneLayout.");
 
             var renderPreset = await _renderPresetRepo.GetByIdAsync(config.PresetId.Value, true, ct);
             if (renderPreset == null)
-                throw new InvalidOperationException("Render Preset bulunamadı.");
+                throw new InvalidOperationException("Render Preset not found.");
 
-            // JSON Ayarlarını Deserialize Et (Entity içindeki helper property ile)
+            // Deserialize JSON Settings
             var visualSettings = renderPreset.VisualEffectsSettings;
             var audioSettings = renderPreset.AudioMixSettings;
+            var capSettings = renderPreset.CaptionSettings;
 
-            // 3. Timeline Oluşturma
+            // 3. Initialize Timeline
             var layout = new SceneLayoutStagePayload
             {
                 Width = renderPreset.OutputWidth,
                 Height = renderPreset.OutputHeight,
                 Fps = renderPreset.Fps,
-                TotalDuration = 0
+                TotalDuration = 0,
+                // Style Settings
+                Style = new RenderStyleSettings
+                {
+                    BitrateKbps = renderPreset.BitrateKbps,
+                    EncoderPreset = renderPreset.EncoderPreset,
+                    FontSize = capSettings.FontSize > 0 ? capSettings.FontSize : 30,
+                    MusicVolume = (audioSettings.MusicVolumePercent > 0 ? audioSettings.MusicVolumePercent : 15) / 100.0,
+                    IsDuckingEnabled = audioSettings.EnableDucking
+                }
             };
 
             double currentTime = 0;
-
-            // Sahneleri Eşleştir ve Sırala
             var sceneCount = scriptData.Scenes.Count;
+
+            await logAsync($"Processing {sceneCount} scenes for the timeline...");
 
             for (int i = 0; i < sceneCount; i++)
             {
                 var sceneNum = i + 1;
 
-                // İlgili dosyaları bul
                 var img = imageData.SceneImages.FirstOrDefault(x => x.SceneNumber == sceneNum);
                 var aud = ttsData.SceneAudios.FirstOrDefault(x => x.SceneNumber == sceneNum);
 
-                if (img == null || aud == null)
+                // 🔥 1. AUDIO CHECK
+                if (aud == null)
                 {
-                    exec.AddLog($"Warning: Scene {sceneNum} missing image or audio. Skipping.");
+                    await logAsync($"⚠️ Warning: Scene {sceneNum} audio missing. Skipping.");
                     continue;
                 }
 
-                // Süreyi belirle (Ses dosyası süresi esastır)
-                // Not: TtsStageExecutor'da NAudio ile süreyi hesaplayıp SceneAudioItem'a ekleseydik harika olurdu.
-                // Şimdilik STT verisinden veya varsayılan bir değerden alalım.
-                double duration = 5.0; // Fallback
+                // 🔥 2. IMAGE CHECK & FALLBACK
+                string currentImagePath;
 
-                // En doğrusu: STT verisindeki son kelimenin bitiş süresi - ilk kelimenin başlangıç süresi? 
-                // Hayır, ses dosyasının fiziksel süresi lazım. 
-                // TtsExecutor'a "DurationSec" alanı ekleyip oradan okumak en temizidir.
-                // Şimdilik basitçe script'teki tahmini süreyi kullanalım, Render aşamasında FFmpeg gerçek süreyi ölçecek.
-                duration = scriptData.Scenes.FirstOrDefault(s => s.SceneNumber == sceneNum)?.EstimatedDuration ?? 5;
+                if (img != null)
+                {
+                    currentImagePath = img.ImagePath;
+                }
+                else
+                {
+                    await logAsync($"⚠️ Warning: Scene {sceneNum} image missing. Applying fallback.");
 
-                // A) Görsel Kanalı (Visual Track)
+                    // Plan A: Use previous image
+                    if (layout.VisualTrack.Count > 0)
+                    {
+                        currentImagePath = layout.VisualTrack.Last().ImagePath;
+                    }
+                    else
+                    {
+                        // Plan B: Default black background for the first scene
+                        currentImagePath = _dir.GetDefaultBlackBackground();
+                    }
+                }
+
+                // Calculate Duration from Audio File
+                double exactAudioDuration = 0;
+
+                try
+                {
+                    using (var audioReader = new AudioFileReader(aud.AudioFilePath))
+                    {
+                        exactAudioDuration = audioReader.TotalTime.TotalSeconds;
+                    }
+                }
+                catch
+                {
+                    exactAudioDuration = 5.0; // Fallback duration
+                    await logAsync($"⚠️ Warning: Could not read audio duration for Scene {sceneNum}. Defaulting to 5s.");
+                }
+
+                double sceneDuration = exactAudioDuration;
+
+                // A) Visual Track
                 layout.VisualTrack.Add(new VisualEvent
                 {
                     SceneIndex = sceneNum,
-                    ImagePath = img.ImagePath,
+                    ImagePath = currentImagePath,
                     StartTime = currentTime,
-                    Duration = duration,
-                    EffectType = i % 2 == 0 ? "zoom_in" : "zoom_out", // Sırayla efekt değiştir
+                    Duration = sceneDuration,
+                    EffectType = i % 2 == 0 ? "zoom_in" : "zoom_out",
                     ZoomIntensity = visualSettings.ZoomIntensity,
                     TransitionType = visualSettings.TransitionType,
                     TransitionDuration = visualSettings.TransitionDurationSec
                 });
 
-                // B) Ses Kanalı (Voice Track)
+                // B) Voice Track
                 layout.AudioTrack.Add(new AudioEvent
                 {
                     Type = "voice",
@@ -118,7 +164,7 @@ namespace Application.Executors
                     Volume = audioSettings.VoiceVolumePercent / 100.0
                 });
 
-                // C) Altyazı Kanalı (Caption Track) - Offsetli
+                // C) Caption Track
                 if (sttData != null)
                 {
                     var sceneWords = sttData.Subtitles
@@ -126,24 +172,19 @@ namespace Application.Executors
                         .Select(w => new CaptionEvent
                         {
                             Text = w.Word,
-                            Start = w.Start + currentTime, // Global zamana göre kaydır
-                            End = w.End + currentTime
+                            Start = w.Start, // Absolute time from STT
+                            End = w.End      // Absolute time from STT
                         });
 
                     layout.CaptionTrack.AddRange(sceneWords);
                 }
 
-                // Sayacı ilerlet
-                currentTime += duration;
+                currentTime += sceneDuration;
             }
 
             layout.TotalDuration = currentTime;
 
-            // D) Arka Plan Müziği (Opsiyonel)
-            // Eğer Preset'te bir müzik yolu varsa buraya eklenir.
-            // layout.AudioTrack.Add(new AudioEvent { Type = "music", ... });
-
-            exec.AddLog($"Timeline created. Total Duration: {layout.TotalDuration:F1}s");
+            await logAsync($"✅ Timeline created successfully. Total Duration: {layout.TotalDuration:F1}s");
 
             return layout;
         }

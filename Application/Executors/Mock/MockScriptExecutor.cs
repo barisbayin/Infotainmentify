@@ -19,9 +19,10 @@ namespace Application.Executors.Mock
             StageExecution exec,
             PipelineContext context,
             object? presetObj,
+            Func<string, Task> logAsync,
             CancellationToken ct)
         {
-            exec.AddLog("Mock Script: Önceki adımın verisi aranıyor...");
+            await logAsync("Mock Script: Önceki adımın verisi aranıyor...");
 
             // 🔥 DÜZELTME: Veriyi "object" olarak alıp Reflection ile okuyalım.
             string title = "Bilinmeyen Konu";

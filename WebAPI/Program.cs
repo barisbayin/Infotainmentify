@@ -9,6 +9,7 @@ using Application.Job;
 using Application.Options;
 using Application.Pipeline;
 using Application.Services;
+using Application.Services.Interfaces;
 using Application.Services.Pipeline;
 using Application.Services.PresetService;
 using Application.SocialPlatform;
@@ -71,6 +72,9 @@ namespace WebAPI
             builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
             builder.Services.AddScoped<IUserDirectoryService, UserDirectoryService>();
             builder.Services.AddScoped<IVideoRendererService, FFmpegVideoService>();
+            builder.Services.AddScoped<IContentPipelineRunner, ContentPipelineRunner>();
+            builder.Services.AddScoped<IContentPipelineService, ContentPipelineService>();
+            builder.Services.AddScoped<INotifierService, SignalRNotifierService>();
 
             // --- Content Services (BaseService Türevleri) ---
             builder.Services.AddScoped<ConceptService>();

@@ -37,5 +37,12 @@ namespace WebAPI.Service
                 Message = message
             });
         }
+
+        public async Task SendLogAsync(int runId, string message)
+        {
+            // Frontend'de .on("ReceiveLog", ...) ile dinleyeceğiz
+            await _hub.Clients.Group($"run-{runId}")
+                              .SendAsync("ReceiveLog", message);
+        }
     }
 }

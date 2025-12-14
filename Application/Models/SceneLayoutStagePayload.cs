@@ -15,5 +15,7 @@
 
         // Altyazı Timeline (Burn-in Captions)
         public List<CaptionEvent> CaptionTrack { get; set; } = new();
+
+        public RenderStyleSettings Style { get; set; } = new();
     }
 }

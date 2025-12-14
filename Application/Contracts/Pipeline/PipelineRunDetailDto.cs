@@ -8,6 +8,7 @@
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
         public string? ErrorMessage { get; set; }
+        public string? FinalVideoUrl { get; set; }
         public List<PipelineStageDto> Stages { get; set; } = new();
     }
 }

@@ -38,16 +38,20 @@ namespace Application.Executors
 
         public override StageType StageType => StageType.Script;
 
+        // 🔥 DÜZELTME 1: 'protected override' yaptık ve logAsync'i kullanıyoruz
         public override async Task<object?> ProcessAsync(
                  ContentPipelineRun run,
                  StageConfig config,
                  StageExecution exec,
                  PipelineContext context,
                  object? presetObj,
+                 Func<string, Task> logAsync, // 🔥 Canlı Log Fonksiyonu
                  CancellationToken ct)
         {
             var preset = (ScriptPreset)presetObj!;
-            exec.AddLog($"Starting Script Generation with preset: {preset.Name}");
+
+            // 🔥 DÜZELTME 2: exec.AddLog yerine logAsync
+            await logAsync($"📝 Starting Script Generation with preset: {preset.Name}");
 
             // 1. Topic Verisini Çek
             var topicPayload = context.GetOutput<TopicStagePayload>(StageType.Topic);
@@ -55,34 +59,31 @@ namespace Application.Executors
             if (topicPayload == null || string.IsNullOrEmpty(topicPayload.TopicText))
                 throw new InvalidOperationException("Önceki adımdan (Topic) veri alınamadı.");
 
-            exec.AddLog($"Source Topic ID: {topicPayload.TopicId}");
+            await logAsync($"Source Topic ID: {topicPayload.TopicId} - '{topicPayload.TopicText}'");
 
             // 2. AI İstemcisi
             var aiClient = await _aiFactory.ResolveTextClientAsync(run.AppUserId, preset.UserAiConnectionId, ct);
 
-            // 3. System Prompt (Preset'ten Geliyor)
-            // Eğer kullanıcı SystemInstruction girmemişse varsayılan basit bir şey ekleyebiliriz ama genelde girer.
-            // JSON format zorlamasını her zaman ekliyoruz, çünkü kodumuz JSON bekliyor.
+            // 3. System Prompt
             var systemPrompt = !string.IsNullOrWhiteSpace(preset.SystemInstruction)
                 ? preset.SystemInstruction
                 : "You are an expert video scriptwriter.";
 
             systemPrompt += "\nIMPORTANT: Output MUST be a valid JSON array of objects (scenes). No markdown.";
 
-            // 4. User Prompt (Preset'ten Geliyor)
-            // {Topic}, {Tone}, {Duration} gibi yer tutucuları (placeholders) dolduruyoruz.
+            // 4. User Prompt
             var userPrompt = preset.PromptTemplate
                 .Replace("{Topic}", topicPayload.TopicText)
                 .Replace("{Tone}", preset.Tone)
                 .Replace("{Duration}", preset.TargetDurationSec.ToString())
                 .Replace("{Language}", preset.Language);
 
-            // Hook ve CTA bayrakları aktifse promptun sonuna ekleyelim
             if (preset.IncludeHook) userPrompt += "\nRequirement: Start with a viral hook.";
             if (preset.IncludeCta) userPrompt += "\nRequirement: End with a call to action.";
 
             // 5. AI Çağrısı
-            exec.AddLog("Sending prompt to AI...");
+            await logAsync("🤖 Sending prompt to AI...");
+
             var responseJson = await aiClient.GenerateTextAsync(
                 prompt: $"{systemPrompt}\n\n{userPrompt}",
                 temperature: 0.7,
@@ -90,12 +91,12 @@ namespace Application.Executors
                 ct: ct
             );
 
-            exec.AddLog("AI response received. Parsing JSON...");
+            await logAsync("✨ AI response received. Parsing JSON...");
 
-            // 5. JSON Parse ve Temizlik
+            // 6. JSON Parse ve Temizlik
             var cleanJson = CleanJson(responseJson);
             var scenes = new List<ScriptSceneItem>();
-            var fullTextBuilder = new System.Text.StringBuilder();
+            var fullTextBuilder = new StringBuilder();
 
             try
             {
@@ -115,15 +116,17 @@ namespace Application.Executors
             }
             catch (Exception ex)
             {
+                // Hata durumunda canlı loga basalım
+                await logAsync($"❌ JSON Parse Error: {ex.Message}");
                 throw new InvalidOperationException($"AI geçersiz JSON döndürdü. Hata: {ex.Message}\nRaw: {responseJson}");
             }
 
-            // 6. DB'ye Kayıt
+            // 7. DB'ye Kayıt
             var scriptEntity = new Script
             {
                 AppUserId = run.AppUserId,
                 TopicId = topicPayload.TopicId,
-                Title = topicPayload.TopicText.Length > 50 ? topicPayload.TopicText[..47] + "..." : topicPayload.TopicText, // Geçici başlık
+                Title = topicPayload.TopicText.Length > 50 ? topicPayload.TopicText[..47] + "..." : topicPayload.TopicText,
                 Content = fullTextBuilder.ToString(),
                 ScenesJson = JsonSerializer.Serialize(scenes),
                 LanguageCode = preset.Language,
@@ -136,9 +139,9 @@ namespace Application.Executors
             await _scriptRepo.AddAsync(scriptEntity, ct);
             await _uow.SaveChangesAsync(ct);
 
-            exec.AddLog($"Script saved. ID: {scriptEntity.Id}, Scenes: {scenes.Count}");
+            await logAsync($"✅ Script saved. ID: {scriptEntity.Id}, Total Scenes: {scenes.Count}");
 
-            // 7. Pipeline Devamı İçin Payload Dönüşü
+            // 8. Pipeline Devamı İçin Payload Dönüşü
             return new ScriptStagePayload
             {
                 ScriptId = scriptEntity.Id,
@@ -148,7 +151,7 @@ namespace Application.Executors
             };
         }
 
-        // --- HELPERS ---
+        // --- HELPERS (Değişiklik yok) ---
         private string CleanJson(string text)
         {
             text = text.Trim();
