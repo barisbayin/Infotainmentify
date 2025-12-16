@@ -26,6 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Job\JobExecutors\" />
     <Folder Include="Migrations\" />
   </ItemGroup>
 
