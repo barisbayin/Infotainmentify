@@ -1,6 +1,8 @@
 ﻿using Application.Contracts.Pipeline;
 using Application.Extensions;
+using Application.Models;
 using Application.Services.Interfaces;
+using Google.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -67,17 +69,13 @@ namespace WebAPI.Controllers
         }
 
         // RETRY
-        [HttpPost("{id}/retry/{stageType}")]
-        public async Task<IActionResult> RetryStage(int id, string stageType, CancellationToken ct)
+        // 1. Basit Retry (Hata alınca tekrar dene butonu)
+        [HttpPost("retry/{runId}/{stageType}")]
+        public async Task<IActionResult> Retry(int runId, string stageType, CancellationToken ct)
         {
-            try
-            {
-                int userId = User.GetUserId();
-                await _pipelineService.RetryStageAsync(userId, id, stageType, ct);
-                return Ok(new { message = $"{stageType} tekrar kuyruğa alındı." });
-            }
-            catch (KeyNotFoundException ex) { return NotFound(ex.Message); }
-            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            // newPresetId yok, sadece tekrar dene
+            await _pipelineService.RetryStageAsync(User.GetUserId(), runId, stageType, null, ct);
+            return Ok(new { message = "Retry işlemi başlatıldı." });
         }
 
         // LOGS
@@ -89,6 +87,22 @@ namespace WebAPI.Controllers
             if (logs == null || !logs.Any()) return Ok(new List<string>()); // Boş liste dön
 
             return Ok(logs);
+        }
+
+
+        // 2. Re-Render (Yeni ayarla tekrar oluştur butonu)
+        [HttpPost("re-render")]
+        public async Task<IActionResult> ReRender([FromBody] ReRenderRequest request, CancellationToken ct)
+        {
+            // newPresetId VAR, render'ı yeni ayarla baştan yap
+            await _pipelineService.RetryStageAsync(
+                User.GetUserId(),
+                request.RunId,
+                "Render", // Veya StageType.Render.ToString()
+                request.NewRenderPresetId,
+                ct
+            );
+            return Ok(new { message = "Re-render işlemi başlatıldı." });
         }
     }
 }

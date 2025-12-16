@@ -139,12 +139,17 @@ namespace Application.Services.Pipeline
             });
         }
 
-        public async Task RetryStageAsync(int userId, int runId, string stageType, CancellationToken ct)
+        public async Task RetryStageAsync(int userId, int runId, string stageType, int? newPresetId = null, CancellationToken ct = default)
         {
+            // 1. Güvenlik Kontrolü (Run bu user'a mı ait?)
+            // GetByIdAsync muhtemelen sadece ID ile çekiyor, userId kontrolünü aşağıda yapıyoruz.
             var run = await _runRepo.GetByIdAsync(runId, false, ct);
-            if (run == null || run.AppUserId != userId) throw new KeyNotFoundException("Run bulunamadı.");
 
-            await _runner.RetryStageAsync(runId, stageType, ct);
+            if (run == null || run.AppUserId != userId)
+                throw new KeyNotFoundException("Run bulunamadı veya erişim yetkiniz yok.");
+
+            // 2. Runner'a devret (newPresetId parametresini de paslıyoruz)
+            await _runner.RetryStageAsync(runId, stageType, newPresetId, ct);
         }
 
         public async Task<List<string>> GetRunLogsAsync(int runId)

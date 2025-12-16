@@ -269,7 +269,8 @@ namespace Application.Pipeline
         // -----------------------------------------------------------------------
         // 🔁 RETRY LOGIC (Arka Plan Görevi)
         // -----------------------------------------------------------------------
-        public async Task RetryStageAsync(int runId, string stageTypeStr, CancellationToken ct)
+        // Parametreye 'newPresetId' eklendi (Opsiyonel)
+        public async Task RetryStageAsync(int runId, string stageTypeStr, int? newPresetId = null, CancellationToken ct = default)
         {
             if (!Enum.TryParse<StageType>(stageTypeStr, true, out var typeEnum))
                 throw new ArgumentException($"Geçersiz aşama türü: {stageTypeStr}");
@@ -289,12 +290,42 @@ namespace Application.Pipeline
             var stageExec = run.StageExecutions.FirstOrDefault(x => x.StageConfig.StageType == typeEnum);
             if (stageExec == null) throw new KeyNotFoundException($"Run içinde '{stageTypeStr}' aşaması yok.");
 
+            // 🔥 EKLEME 1: Yeni Preset Seçildiyse Güncelle
+            if (newPresetId.HasValue)
+            {
+                // NOT: Eğer StageConfig her Run için kopyalanıyorsa bu güvenlidir.
+                // Template'e bağlı ortak config ise dikkat!
+                stageExec.StageConfig.PresetId = newPresetId.Value;
+
+                // Log ekleyelim (Senin Notifier yapınla)
+                await _notifier.SendLogAsync(run.Id, $"⚙️ Render Preset updated to ID: {newPresetId.Value}");
+            }
+
             // 2. Sicili Temizle (Reset)
             stageExec.Status = StageStatus.Pending;
             stageExec.Error = null;
             stageExec.RetryCount = 0;
 
-            // Run durumu Failed ise tekrar Running'e çek
+            // Eski Output/Log verilerini de temizlemek iyi olabilir
+            stageExec.OutputJson = null;
+
+            // 🔥 EKLEME 2: Zincirleme Reaksiyon (Sonraki Aşamaları da Sıfırla)
+            // Render tekrar çalışınca oluşan video değişecek. 
+            // O yüzden Upload gibi sonraki aşamaların da "Completed" kalması mantıksız olur.
+            var currentOrder = stageExec.StageConfig.Order;
+            var nextStages = run.StageExecutions
+                .Where(x => x.StageConfig.Order > currentOrder)
+                .ToList();
+
+            foreach (var next in nextStages)
+            {
+                next.Status = StageStatus.Pending;
+                next.Error = null;
+                next.FinishedAt = null;
+                // next.OutputJson = null; // Gerekirse
+            }
+
+            // Run durumu Failed veya Completed ise tekrar Running'e çek
             if (run.Status == ContentPipelineStatus.Failed || run.Status == ContentPipelineStatus.Completed)
             {
                 run.Status = ContentPipelineStatus.Running;
@@ -302,11 +333,10 @@ namespace Application.Pipeline
             }
 
             await _uow.SaveChangesAsync(ct);
-            await _notifier.SendLogAsync(run.Id, $"🔄 Retry requested for stage: {stageTypeStr}. Resetting status...");
+            await _notifier.SendLogAsync(run.Id, $"🔄 Retry requested for stage: {stageTypeStr}. Pipeline restarting...");
 
             // 3. Arka Planda Yeniden Başlat (Fire & Forget)
-            // Concurrency (Eşzamanlılık) hatası olmasın diye kısa bekleme
-            await Task.Delay(200);
+            await Task.Delay(200); // Concurrency önlemi
 
             _ = Task.Run(async () =>
             {

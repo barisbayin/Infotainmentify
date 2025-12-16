@@ -1,5 +1,6 @@
 ﻿using Application.Abstractions;
 using Application.Models;
+using Core.Entity;
 using Core.Entity.Models;
 using Core.Enums;
 using System.Diagnostics;
@@ -14,30 +15,26 @@ namespace Application.Services
 
         public FFmpegVideoService()
         {
-            // wwwroot/ALL_FILES/Assets yolunu belirliyoruz
             _assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ALL_FILES", "Assets");
         }
 
-        // 🔥 GÜNCELLEME: cultureCode parametresi eklendi
         public async Task<string> RenderVideoAsync(SceneLayoutStagePayload layout, string outputPath, string cultureCode = "en-US", CancellationToken ct = default)
         {
             var tempId = Guid.NewGuid().ToString("N")[..8];
             var workDir = Path.GetDirectoryName(outputPath)!;
 
             // Geçici dosya yolları
-            var srtPath = Path.Combine(workDir, $"subs_{tempId}.srt");
+            var srtPath = Path.Combine(workDir, $"subs_{tempId}.ass"); // ASS uzantısı önemli
             var audioListPath = Path.Combine(workDir, $"audio_{tempId}.txt");
 
-            // 🎵 Müzik Seçimi (Layout'ta yoksa rastgele)
             var musicPath = GetRandomMusicFile();
 
             try
             {
-                // 1. Altyazı Dosyasını Oluştur (.srt)
-                // 🔥 Dil kodunu ve Ayarları gönderiyoruz
-                await GenerateSrtFileAsync(layout.CaptionTrack, srtPath, layout.Style.CaptionSettings, cultureCode);
+                // 1. ASS Altyazı Dosyasını Oluştur (Stil ve Animasyonlu)
+                await GenerateDynamicAssFileAsync(layout.CaptionTrack, srtPath, layout.Style.CaptionSettings, cultureCode);
 
-                // 2. Ses Listesini Oluştur (.txt concat formatı)
+                // 2. Ses Listesini Oluştur
                 await GenerateAudioListAsync(layout.AudioTrack, audioListPath);
 
                 // 3. FFmpeg Komutunu İnşa Et
@@ -50,47 +47,37 @@ namespace Application.Services
             }
             finally
             {
-                // Çöp dosyaları temizle
                 if (File.Exists(srtPath)) File.Delete(srtPath);
                 if (File.Exists(audioListPath)) File.Delete(audioListPath);
             }
         }
 
-        // -----------------------------------------------------------------------
-        // 🔥 FFmpeg KOMUT İNŞASI (DÜZELTİLMİŞ & OPTİMİZE EDİLMİŞ)
-        // -----------------------------------------------------------------------
-        private string BuildFFmpegCommand(SceneLayoutStagePayload layout, string srtPath, string audioListPath, string? musicPath, string outputPath)
+        // ... (BuildFFmpegCommand, GetFontPath, HexToAssColor, GetRandomMusicFile metodları AYNI KALSIN) ...
+        // Yer kaplamasın diye onları tekrar yazmıyorum, yukarıdaki kodunun aynısı.
+        // Sadece BuildFFmpegCommand metodunun içini atıyorum tekrar kontrol etmen için:
+
+        private string BuildFFmpegCommand(SceneLayoutStagePayload layout, string subPath, string audioListPath, string? musicPath, string outputPath)
         {
             var sb = new StringBuilder();
             var filter = new StringBuilder();
 
-            // Helper: Windows yollarını FFmpeg formatına çevir
             string Escape(string p) => p.Replace("\\", "/").Replace(":", "\\:");
             string FloatStr(double val) => val.ToString("0.00", CultureInfo.InvariantCulture);
 
-            // ==========================================
-            // 1. GİRDİLER (INPUTS)
-            // ==========================================
-
-            // [0] Ses Dosyaları Listesi (Konuşmalar)
+            // GİRDİLER
             sb.Append($"-f concat -safe 0 -i \"{audioListPath}\" ");
-
-            // [1] Arka Plan Müziği (Varsa)
             if (musicPath != null) sb.Append($"-stream_loop -1 -i \"{musicPath}\" ");
 
-            // [2..N] Görsel Dosyalar (Resimler)
             int imgStartIndex = musicPath != null ? 2 : 1;
             foreach (var visual in layout.VisualTrack)
             {
                 sb.Append($"-i \"{visual.ImagePath}\" ");
             }
 
-            // ==========================================
-            // 2. FILTRE ZİNCİRİ (FILTER COMPLEX)
-            // ==========================================
+            // FILTER COMPLEX
             sb.Append("-filter_complex \"");
 
-            // --- A) GÖRSEL EFEKTLER (ZOOM FIX YAPILDI) ---
+            // A) GÖRSELLER (Zoom/Pan)
             for (int i = 0; i < layout.VisualTrack.Count; i++)
             {
                 var v = layout.VisualTrack[i];
@@ -98,43 +85,30 @@ namespace Application.Services
                 int frames = (int)(v.Duration * layout.Fps);
 
                 double maxZoom = layout.Style.VisualEffectsSettings.ZoomIntensity;
-                if (maxZoom < 1.0) maxZoom = 1.1; // Default güvenlik
+                if (maxZoom < 1.0) maxZoom = 1.1;
 
-                // 🔥 init_zoom Kaldırıldı, Formül revize edildi 🔥
                 string zoomExpr;
-                if (v.EffectType == "zoom_in")
-                {
-                    // Zoom In: 1'den başla -> maxZoom'a git
-                    zoomExpr = $"min(zoom+0.0015,{FloatStr(maxZoom)})";
-                }
-                else // zoom_out
-                {
-                    // Zoom Out: İlk karede (on=1) maxZoom yap, sonra azalt
-                    zoomExpr = $"if(eq(on,1),{FloatStr(maxZoom)},max(1.0,zoom-0.0015))";
-                }
+                if (v.EffectType == "zoom_in") zoomExpr = $"min(zoom+0.0015,{FloatStr(maxZoom)})";
+                else zoomExpr = $"if(eq(on,1),{FloatStr(maxZoom)},max(1.0,zoom-0.0015))";
 
-                // High Quality Zoom için önce scale=-2:4*ih yapıyoruz
                 filter.Append($"[{idx}:v]scale=-2:4*ih,zoompan=z='{zoomExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={layout.Width}x{layout.Height}:fps={layout.Fps},setsar=1");
 
-                // Renk Filtreleri
                 var cf = layout.Style.VisualEffectsSettings.ColorFilter;
                 if (!string.IsNullOrEmpty(cf))
                 {
                     if (cf == "bw_noir") filter.Append(",hue=s=0");
                     else if (cf == "cinematic_warm") filter.Append(",curves=r='0/0 1/1':g='0/0 0.8/1':b='0/0 0.8/1'");
                 }
-
                 filter.Append($"[v{i}];");
             }
 
-            // --- B) CONCAT ---
+            // B) CONCAT
             for (int i = 0; i < layout.VisualTrack.Count; i++) filter.Append($"[v{i}]");
             filter.Append($"concat=n={layout.VisualTrack.Count}:v=1:a=0[v_joined];");
 
-            // --- C) BRANDING / WATERMARK ---
-            string vAfterBranding = "[v_branded]";
+            // C) BRANDING
+            string lastVideoLabel = "[v_joined]";
             var branding = layout.Style.BrandingSettings;
-
             if (branding != null && branding.EnableWatermark)
             {
                 string overlayPos = branding.Position switch
@@ -142,76 +116,41 @@ namespace Application.Services
                     "TopLeft" => "x=20:y=20",
                     "TopRight" => "x=W-w-20:y=20",
                     "BottomLeft" => "x=20:y=H-h-20",
-                    _ => "x=W-w-20:y=H-h-20" // Default BottomRight
+                    _ => "x=W-w-20:y=H-h-20"
                 };
-
                 string fontPath = GetFontPath("Arial-Bold");
                 string colorAss = HexToAssColor(branding.WatermarkColor, branding.Opacity);
-
                 filter.Append($"[v_joined]drawtext=fontfile='{Escape(fontPath)}':text='{branding.WatermarkText}':fontcolor={colorAss}:fontsize=24:{overlayPos}[v_branded];");
-            }
-            else
-            {
-                vAfterBranding = "[v_joined]";
+                lastVideoLabel = "[v_branded]";
             }
 
-            string lastVideoLabel = (branding != null && branding.EnableWatermark) ? "[v_branded]" : "[v_joined]";
-
-            // --- D) ALTYAZILAR (GELİŞMİŞ) ---
+            // D) ALTYAZILAR (ASS - Stil Dosyanın İçinde)
             var capSettings = layout.Style.CaptionSettings;
             if (capSettings.EnableCaptions)
             {
-                string srt = Escape(srtPath);
+                string assFile = Escape(subPath);
                 string fontFile = GetFontPath(capSettings.FontName);
                 string fontsDir = Escape(Path.GetDirectoryName(fontFile)!);
 
-                string primary = HexToAssColor(capSettings.PrimaryColor);
-                string outline = HexToAssColor(capSettings.OutlineColor);
-
-                // Pozisyon Ayarı (Alignment)
-                int alignment = capSettings.Position switch
-                {
-                    CaptionPositionTypes.Bottom => 2, // Alt Orta
-                    CaptionPositionTypes.Center => 5, // Tam Orta
-                    CaptionPositionTypes.Top => 6,    // Üst Orta
-                    _ => 2
-                };
-
-                // BorderStyle=1 (Outline) default. Highlight istenirse BorderStyle=3 (Box)
-                string borderStyle = "1";
-                string outlineParam = $"OutlineColour={outline}";
-
-                if (capSettings.EnableHighlight)
-                {
-                    borderStyle = "3"; // Kutu
-                    // Highlight rengini OutlineColour yerine BackColour olarak veriyoruz (veya OutlineColour kutu rengi olur)
-                    // ASS'de BackColour kutu rengidir.
-                    string highlightColor = HexToAssColor(capSettings.HighlightColor ?? "#000000", 0.7);
-                    outlineParam = $"BackColour={highlightColor},OutlineColour={outline}";
-                }
-
-                string style = $"FontName={Path.GetFileNameWithoutExtension(fontFile)},FontSize={capSettings.FontSize},PrimaryColour={primary},{outlineParam},BorderStyle={borderStyle},Outline={capSettings.OutlineSize},Shadow=0,MarginV={capSettings.MarginBottom},Alignment={alignment}";
-
-                filter.Append($"{lastVideoLabel}subtitles='{srt}':fontsdir='{fontsDir}':force_style='{style}'[v_final];");
+                // Force Style SİLİNDİ, sadece dosya yolu ve font klasörü veriliyor.
+                filter.Append($"{lastVideoLabel}subtitles='{assFile}':fontsdir='{fontsDir}'[v_final];");
             }
             else
             {
                 filter.Append($"{lastVideoLabel}null[v_final];");
             }
 
-            // --- E) SES MİKSAJI (AUDIO DUCKING & FADE) ---
+            // E) SES
             var mix = layout.Style.AudioMixSettings;
             if (musicPath != null)
             {
                 double musicVol = mix.MusicVolumePercent / 100.0;
                 double voiceVol = mix.VoiceVolumePercent / 100.0;
-
                 filter.Append($"[1:a]volume={FloatStr(musicVol)}[bg];");
                 filter.Append($"[0:a]volume={FloatStr(voiceVol)}[fg];");
 
                 if (mix.EnableDucking)
                 {
-                    // Ducking: Müzik kısılsın konuşma gelince
                     filter.Append($"[bg][fg]sidechaincompress=threshold=0.05:ratio=5:attack=50:release=300[bg_ducked];");
                     filter.Append($"[fg][bg_ducked]amix=inputs=2:duration=first[a_mixed];");
                 }
@@ -237,43 +176,167 @@ namespace Application.Services
             }
             filter.Append("\"");
 
-            // ==========================================
-            // 3. ÇIKTI AYARLARI (GPU & ENCODER)
-            // ==========================================
+            // ÇIKTI
             sb.Append(filter.ToString());
             sb.Append(" -map \"[v_final]\" -map \"[a_final]\" ");
 
-            // GPU Preset
-            string gpuPreset = layout.Style.EncoderPreset switch
-            {
-                "ultrafast" or "superfast" => "p1",
-                "fast" => "p3",
-                "slow" => "p6",
-                _ => "p4"
-            };
-
+            // GPU
+            string gpuPreset = layout.Style.EncoderPreset switch { "fast" => "p3", "slow" => "p6", _ => "p4" };
             sb.Append($"-c:v h264_nvenc -preset {gpuPreset} ");
             sb.Append($"-b:v {layout.Style.BitrateKbps}k -maxrate {layout.Style.BitrateKbps + 1000}k -bufsize 10M ");
             sb.Append("-pix_fmt yuv420p ");
             sb.Append("-c:a aac -b:a 192k ");
-            sb.Append("-shortest "); // En kısa olana göre kes (Genelde ses biter video biter)
+            sb.Append("-shortest ");
             sb.Append($"-y \"{outputPath}\"");
 
             return sb.ToString();
         }
 
         // -----------------------------------------------------------------------
-        // 🛠️ YARDIMCI METODLAR
+        // 🔥 DÜZELTİLMİŞ ASS GENERATOR (OKUNABİLİRLİK İÇİN)
         // -----------------------------------------------------------------------
+        private async Task GenerateDynamicAssFileAsync(List<CaptionEvent> captions, string path, RenderCaptionSettings settings, string cultureCode)
+        {
+            var sb = new StringBuilder();
 
+            // Culture Handling
+            CultureInfo culture;
+            try { culture = new CultureInfo(cultureCode); } catch { culture = new CultureInfo("en-US"); }
+
+            // 1. FONT VE OKUNABİLİRLİK AYARLARI
+            int finalFontSize = settings.FontSize;
+            if (finalFontSize < 75) finalFontSize = 75; // Okunabilirlik garantisi
+
+            // --- HEADER ---
+            sb.AppendLine("[Script Info]");
+            sb.AppendLine("ScriptType: v4.00+");
+            sb.AppendLine("WrapStyle: 2");
+            sb.AppendLine("PlayResX: 1080");
+            sb.AppendLine("PlayResY: 1920");
+            sb.AppendLine();
+
+            sb.AppendLine("[V4+ Styles]");
+            sb.AppendLine("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding");
+
+            // RENKLER
+            string primary = HexToAssColor(settings.PrimaryColor); // Örn: Beyaz
+
+            // Eğer vurgu rengi Siyah ise (#000000), bunu yazı rengi yapmamalıyız!
+            // Sadece arka plan rengi olarak kullanacağız.
+            string highlightBoxColor = HexToAssColor(settings.HighlightColor ?? "#000000", 1.0);
+
+            // Normal Outline rengi (Highlight kapalıyken)
+            string normalOutlineColor = HexToAssColor(settings.OutlineColor);
+
+            // Kutu Ayarları
+            string backColor = normalOutlineColor;
+            int borderStyle = 1;
+            int outlineSize = settings.OutlineSize;
+
+            // Harf Aralığı (Spacing): Kutu olunca harfler yapışmasın diye açıyoruz
+            double spacing = 1.0;
+
+            if (settings.EnableHighlight)
+            {
+                // 🔥 Kutu Rengi = Vurgu Rengi (Siyah)
+                backColor = highlightBoxColor;
+
+                // Outline Kalınlığı: Çok kalın olursa yazıyı yer. %15 idealdir.
+                outlineSize = (int)(finalFontSize * 0.15);
+                if (outlineSize < 5) outlineSize = 5;
+
+                // Kutu modunda harfleri biraz daha ayır ki oval arka planlar birbirine girmesin
+                spacing = 3.0;
+            }
+
+            string fontName = Path.GetFileNameWithoutExtension(settings.FontName);
+
+            int align = settings.Position switch
+            {
+                CaptionPositionTypes.Bottom => 2,
+                CaptionPositionTypes.Center => 5,
+                CaptionPositionTypes.Top => 8,
+                _ => 2
+            };
+
+            int marginV = settings.MarginBottom;
+            if (align == 2 && marginV < 200) marginV = 200;
+
+            // Stil Tanımı
+            sb.AppendLine($"Style: Default,{fontName},{finalFontSize},{primary},&H000000FF,{backColor},&H00000000,1,0,0,0,100,100,{spacing},0,{borderStyle},{outlineSize},0,{align},20,20,{marginV},1");
+            sb.AppendLine();
+
+            sb.AppendLine("[Events]");
+            sb.AppendLine("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
+
+            // --- KELİME İŞLEME VE MANTIĞI ---
+            int targetWordCount = settings.MaxWordsPerLine > 0 ? settings.MaxWordsPerLine : 2;
+
+            var flatWordList = new List<(string Word, double Start, double End)>();
+
+            foreach (var cap in captions)
+            {
+                string txt = settings.Uppercase ? cap.Text.ToUpper(culture) : cap.Text;
+                var words = txt.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+                double totalDur = cap.End - cap.Start;
+                double perWord = totalDur / words.Length;
+
+                for (int i = 0; i < words.Length; i++)
+                {
+                    double wStart = cap.Start + (i * perWord);
+                    double wEnd = wStart + perWord;
+                    flatWordList.Add((words[i], wStart, wEnd));
+                }
+            }
+
+            for (int i = 0; i < flatWordList.Count; i += targetWordCount)
+            {
+                var chunk = flatWordList.Skip(i).Take(targetWordCount).ToList();
+                if (!chunk.Any()) break;
+
+                string lineText = string.Join(" ", chunk.Select(c => c.Word));
+                double startTimeMs = chunk.First().Start * 1000;
+                double endTimeMs = chunk.Last().End * 1000;
+
+                // 🔥 KRİTİK DÜZELTME: ANİMASYON TAGLERİ
+                string animTags = "";
+                if (settings.EnableHighlight)
+                {
+                    // ESKİSİ (Hatalı): {{\\1c{highlightBoxColor}...}} -> Yazıyı SİYAH yapıyordu.
+
+                    // YENİSİ: Rengi değiştirme! Sadece Büyüt (Pop Up).
+                    // Yazı zaten Primary (Beyaz) kalacak, Arka Plan (Box) zaten Siyah tanımlandı.
+                    // \t(0,100,\fscx110\fscy110): İlk 100ms içinde %110 büyüt.
+                    animTags = "{\\t(0,100,\\fscx110\\fscy110)}";
+
+                    // İstersen opsiyonel: Vurgu rengi Siyah değilse (örn: Sarı), yazıyı Sarı yapabilirsin.
+                    // Ama senin UI'da "Vurgu" genelde kutu rengi olarak algılandığı için 
+                    // rengi değiştirmemek en güvenlisidir.
+                }
+
+                TimeSpan start = TimeSpan.FromMilliseconds(startTimeMs);
+                TimeSpan end = TimeSpan.FromMilliseconds(endTimeMs);
+
+                sb.AppendLine($"Dialogue: 0,{FormatAssTime(start)},{FormatAssTime(end)},Default,,0,0,0,,{animTags}{lineText}");
+            }
+
+            await File.WriteAllTextAsync(path, sb.ToString(), Encoding.UTF8);
+        }
+
+        // Diğer helper metodlar (GetFontPath, HexToAssColor, BreakTextToLines, GenerateAudioListAsync, RunFFmpegProcessAsync, FormatAssTime)
+        // Bunları zaten önceden yazmıştık, aynılarını kullanabilirsin.
+        // Özellikle FormatAssTime metodunu class içine eklemeyi unutma.
+        private string FormatAssTime(TimeSpan t) => $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}.{t.Milliseconds / 10:D2}";
+
+        // ... (HexToAssColor vb. önceki koddan alabilirsin) ...
         private string GetFontPath(string fontName)
         {
+            // Önceki implementasyonun aynısı
             string directPath = Path.Combine(_assetsPath, "fonts", fontName);
             if (File.Exists(directPath)) return directPath;
-
             string withExt = Path.Combine(_assetsPath, "fonts", fontName + ".ttf");
             if (File.Exists(withExt)) return withExt;
-
             var defaultFont = Directory.GetFiles(Path.Combine(_assetsPath, "fonts"), "*.ttf").FirstOrDefault();
             return defaultFont ?? "Arial";
         }
@@ -282,20 +345,11 @@ namespace Application.Services
         {
             if (string.IsNullOrEmpty(hex)) return "&H00FFFFFF";
             hex = hex.Replace("#", "");
-
             string r = "FF", g = "FF", b = "FF";
-            if (hex.Length >= 6)
-            {
-                r = hex.Substring(0, 2);
-                g = hex.Substring(2, 2);
-                b = hex.Substring(4, 2);
-            }
-
-            // Alpha Tersi (00 görünür, FF saydam)
+            if (hex.Length >= 6) { r = hex.Substring(0, 2); g = hex.Substring(2, 2); b = hex.Substring(4, 2); }
             int alphaInt = (int)((1.0 - opacity) * 255);
             string alphaHex = alphaInt.ToString("X2");
-
-            return $"&H{alphaHex}{b}{g}{r}"; // BGR sıralaması
+            return $"&H{alphaHex}{b}{g}{r}";
         }
 
         private string? GetRandomMusicFile()
@@ -306,69 +360,11 @@ namespace Application.Services
             return files.Length > 0 ? files[new Random().Next(files.Length)] : null;
         }
 
-        // 🔥 GÜNCELLENMİŞ SRT METODU (Settings & Culture)
-        private async Task GenerateSrtFileAsync(List<CaptionEvent> captions, string path, RenderCaptionSettings settings, string cultureCode)
-        {
-            var sb = new StringBuilder();
-            int i = 1;
-
-            // CultureInfo oluştur (Fallback: en-US)
-            CultureInfo culture;
-            try { culture = new CultureInfo(cultureCode); }
-            catch { culture = new CultureInfo("en-US"); }
-
-            foreach (var cap in captions)
-            {
-                string text = cap.Text;
-
-                // 1. Uppercase Ayarı
-                if (settings.Uppercase)
-                {
-                    text = text.ToUpper(culture);
-                }
-
-                // 2. Satır Bölme (MaxWordsPerLine)
-                if (settings.MaxWordsPerLine > 0 && settings.MaxWordsPerLine < 20)
-                {
-                    text = BreakTextToLines(text, settings.MaxWordsPerLine);
-                }
-
-                sb.AppendLine($"{i++}");
-                sb.AppendLine($"{TimeSpan.FromSeconds(cap.Start):hh\\:mm\\:ss\\,fff} --> {TimeSpan.FromSeconds(cap.End):hh\\:mm\\:ss\\,fff}");
-                sb.AppendLine(text);
-                sb.AppendLine();
-            }
-            await File.WriteAllTextAsync(path, sb.ToString(), Encoding.UTF8);
-        }
-
-        private string BreakTextToLines(string text, int maxWords)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return text;
-            var words = text.Split(' ');
-            if (words.Length <= maxWords) return text;
-
-            var sb = new StringBuilder();
-            int count = 0;
-            foreach (var word in words)
-            {
-                sb.Append(word + " ");
-                count++;
-                if (count >= maxWords)
-                {
-                    sb.AppendLine();
-                    count = 0;
-                }
-            }
-            return sb.ToString().Trim();
-        }
-
         private async Task GenerateAudioListAsync(List<AudioEvent> audios, string path)
         {
             var sb = new StringBuilder();
             foreach (var audio in audios.Where(a => a.Type == "voice").OrderBy(a => a.StartTime))
             {
-                // URL ise de çalışmazsa Executor'da çevirdik varsayıyoruz.
-                // Yine de garanti olsun diye Replace yapıyoruz ama fiziksel yol gelmeli.
                 sb.AppendLine($"file '{audio.FilePath.Replace("\\", "/")}'");
             }
             await File.WriteAllTextAsync(path, sb.ToString(), new UTF8Encoding(false));
@@ -376,6 +372,7 @@ namespace Application.Services
 
         private async Task RunFFmpegProcessAsync(string args, CancellationToken ct)
         {
+            // Önceki implementasyonun aynısı
             var p = new Process
             {
                 StartInfo = new ProcessStartInfo
@@ -388,18 +385,14 @@ namespace Application.Services
                     CreateNoWindow = true
                 }
             };
-
             var errLog = new StringBuilder();
             p.ErrorDataReceived += (s, e) => { if (e.Data != null) errLog.AppendLine(e.Data); };
-
             p.Start();
             p.BeginErrorReadLine();
             await p.WaitForExitAsync(ct);
-
             if (p.ExitCode != 0)
             {
                 var logStr = errLog.ToString();
-                // Son 1000 karakteri göster
                 var errPart = logStr.Length > 1000 ? logStr.Substring(logStr.Length - 1000) : logStr;
                 throw new Exception($"FFmpeg Hatası: {errPart}");
             }
