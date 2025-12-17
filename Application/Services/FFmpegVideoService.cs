@@ -23,24 +23,53 @@ namespace Application.Services
             var tempId = Guid.NewGuid().ToString("N")[..8];
             var workDir = Path.GetDirectoryName(outputPath)!;
 
-            // Geçici dosya yolları
-            var srtPath = Path.Combine(workDir, $"subs_{tempId}.ass"); // ASS uzantısı önemli
+            var srtPath = Path.Combine(workDir, $"subs_{tempId}.ass");
             var audioListPath = Path.Combine(workDir, $"audio_{tempId}.txt");
+
+            // =================================================================
+            // 🔥 FONT OPERASYONU (DEDEKTİF MODU)
+            // =================================================================
+            // Veritabanından gelen isim: "Poppins-Bold" (veya GUID)
+            string requestedFontName = layout.Style.CaptionSettings.FontName;
+
+            // 1. Akıllı Arama: Dosya adı GUID bile olsa, içini okuyup Aile Adı "Poppins" olanı bulur.
+            string originalFontPath = GetSmartFontPath(requestedFontName);
+
+            // 2. Fontun özelliklerini (Bold/Italic) isimden ayrıştır
+            var fontInfo = ParseFontInfo(requestedFontName);
+
+            // 3. Dosyayı temiz bir isimle (örn: Poppins.ttf) workDir'e kopyala
+            // Böylece ASS dosyası "Poppins" aradığında, yanındaki dosyayı bulacak.
+            string cleanFileName = $"{fontInfo.FamilyName}.ttf";
+            string localFontPath = Path.Combine(workDir, cleanFileName);
+
+            if (File.Exists(originalFontPath) && !File.Exists(localFontPath))
+            {
+                File.Copy(originalFontPath, localFontPath);
+            }
+            else if (!File.Exists(originalFontPath))
+            {
+                // Font hiç bulunamazsa, Arial kullanması için fallback yapabiliriz
+                // veya loglayabiliriz.
+                fontInfo.FamilyName = "Arial";
+            }
+
+            // 4. Layout ayarını güncelle ki ASS oluştururken doğru isim kullanılsın
+            layout.Style.CaptionSettings.FontName = fontInfo.FamilyName;
+            // =================================================================
 
             var musicPath = GetRandomMusicFile();
 
             try
             {
-                // 1. ASS Altyazı Dosyasını Oluştur (Stil ve Animasyonlu)
-                await GenerateDynamicAssFileAsync(layout.CaptionTrack, srtPath, layout.Style.CaptionSettings, cultureCode);
+                // ASS oluştur (FontInfo ile Bold/Italic bilgisini gönderiyoruz)
+                await GenerateDynamicAssFileAsync(layout.CaptionTrack, srtPath, layout.Style.CaptionSettings, cultureCode, fontInfo);
 
-                // 2. Ses Listesini Oluştur
                 await GenerateAudioListAsync(layout.AudioTrack, audioListPath);
 
-                // 3. FFmpeg Komutunu İnşa Et
-                var args = BuildFFmpegCommand(layout, srtPath, audioListPath, musicPath, outputPath);
+                // FFmpeg Komutu (fontsdir = workDir)
+                var args = BuildFFmpegCommand(layout, srtPath, audioListPath, musicPath, outputPath, workDir);
 
-                // 4. Render'ı Başlat
                 await RunFFmpegProcessAsync(args, ct);
 
                 return outputPath;
@@ -49,19 +78,155 @@ namespace Application.Services
             {
                 if (File.Exists(srtPath)) File.Delete(srtPath);
                 if (File.Exists(audioListPath)) File.Delete(audioListPath);
+                if (File.Exists(localFontPath)) File.Delete(localFontPath);
             }
         }
 
-        // ... (BuildFFmpegCommand, GetFontPath, HexToAssColor, GetRandomMusicFile metodları AYNI KALSIN) ...
-        // Yer kaplamasın diye onları tekrar yazmıyorum, yukarıdaki kodunun aynısı.
-        // Sadece BuildFFmpegCommand metodunun içini atıyorum tekrar kontrol etmen için:
+        // =================================================================
+        // 🕵️‍♂️ AKILLI FONT BULUCU (Diskteki dosya adı ne olursa olsun bulur)
+        // =================================================================
+        private string GetSmartFontPath(string fontName)
+        {
+            string fontsFolder = Path.Combine(_assetsPath, "fonts");
 
-        private string BuildFFmpegCommand(SceneLayoutStagePayload layout, string subPath, string audioListPath, string? musicPath, string outputPath)
+            // 1. Basit Arama: İsim birebir tutuyor mu?
+            string directPath = Path.Combine(fontsFolder, fontName);
+            if (File.Exists(directPath)) return directPath;
+            if (File.Exists(directPath + ".ttf")) return directPath + ".ttf";
+            if (File.Exists(directPath + ".otf")) return directPath + ".otf";
+
+            // 2. Derin Arama: İsimden Aile Adını al (Poppins-Bold -> Poppins) ve klasörü tara
+            var info = ParseFontInfo(fontName);
+            string? foundPath = ScanFolderForFontFamily(fontsFolder, info.FamilyName);
+
+            if (foundPath != null) return foundPath;
+
+            // 3. Hiçbiri yoksa varsayılan (Arial vb.) döner
+            return Directory.GetFiles(fontsFolder, "*.ttf").FirstOrDefault() ?? "Arial";
+        }
+
+        private string? ScanFolderForFontFamily(string folder, string targetFamily)
+        {
+            if (!Directory.Exists(folder)) return null;
+
+            var allFonts = Directory.GetFiles(folder, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(s => s.EndsWith(".ttf") || s.EndsWith(".otf"));
+
+            foreach (var file in allFonts)
+            {
+                // Her dosyanın binary başlığını oku
+                string? internalFamily = GetFontFamilyName(file);
+
+                // Eşleşme var mı?
+                if (string.Equals(internalFamily, targetFamily, StringComparison.OrdinalIgnoreCase))
+                {
+                    return file;
+                }
+            }
+            return null;
+        }
+
+        // --- FONT PARSE HELPER ---
+        private class FontInfo { public string FamilyName { get; set; } = "Arial"; public bool IsBold { get; set; } public bool IsItalic { get; set; } }
+
+        private FontInfo ParseFontInfo(string rawName)
+        {
+            var info = new FontInfo();
+            if (string.IsNullOrEmpty(rawName)) return info;
+
+            // "Poppins-Bold" -> ["Poppins", "Bold"]
+            var parts = rawName.Split(new[] { '-', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // İlk parça Aile Adıdır
+            info.FamilyName = parts[0];
+
+            // Diğer parçalar özellik
+            foreach (var part in parts)
+            {
+                if (part.Equals("Bold", StringComparison.OrdinalIgnoreCase)) info.IsBold = true;
+                if (part.Equals("Italic", StringComparison.OrdinalIgnoreCase)) info.IsItalic = true;
+            }
+            return info;
+        }
+
+        // =================================================================
+        // 🧙‍♂️ BINARY READER: TTF/OTF İÇİNDEN GERÇEK ADI OKUMA
+        // =================================================================
+        private string? GetFontFamilyName(string fontPath)
+        {
+            try
+            {
+                using var fs = File.OpenRead(fontPath);
+                using var reader = new BinaryReader(fs);
+
+                fs.Position = 4;
+                ushort tableCount = Swap(reader.ReadUInt16());
+                fs.Position = 12;
+
+                long nameTableOffset = 0;
+                for (int i = 0; i < tableCount; i++)
+                {
+                    uint tag = reader.ReadUInt32();
+                    reader.ReadUInt32(); // Checksum
+                    uint offset = Swap(reader.ReadUInt32());
+                    reader.ReadUInt32(); // Length
+
+                    if (tag == 0x656D616E) // 'name'
+                    {
+                        nameTableOffset = offset;
+                        break;
+                    }
+                }
+
+                if (nameTableOffset == 0) return null;
+
+                fs.Position = nameTableOffset;
+                ushort format = Swap(reader.ReadUInt16());
+                ushort count = Swap(reader.ReadUInt16());
+                ushort stringOffset = Swap(reader.ReadUInt16());
+                long storageOffset = nameTableOffset + stringOffset;
+
+                for (int i = 0; i < count; i++)
+                {
+                    ushort platformId = Swap(reader.ReadUInt16());
+                    reader.ReadUInt16(); // encodingId
+                    reader.ReadUInt16(); // languageId
+                    ushort nameId = Swap(reader.ReadUInt16());
+                    ushort length = Swap(reader.ReadUInt16());
+                    ushort offset = Swap(reader.ReadUInt16());
+
+                    // NameID 1 = Font Family Name, PlatformID 3 = Windows
+                    if (nameId == 1 && (platformId == 3 || platformId == 0))
+                    {
+                        fs.Position = storageOffset + offset;
+                        byte[] data = reader.ReadBytes(length);
+                        return Encoding.BigEndianUnicode.GetString(data).Trim('\0');
+                    }
+                }
+            }
+            catch { return null; }
+            return null;
+        }
+
+        private ushort Swap(ushort x) => (ushort)((x >> 8) | (x << 8));
+        private uint Swap(uint x) => ((x >> 24) & 0xff) | ((x >> 8) & 0xff00) | ((x << 8) & 0xff0000) | ((x << 24) & 0xff000000);
+
+
+        // =================================================================
+        // 🛠️ FFmpeg KOMUT İNŞASI
+        // =================================================================
+        private string BuildFFmpegCommand(SceneLayoutStagePayload layout, string subPath, string audioListPath, string? musicPath, string outputPath, string workDir)
         {
             var sb = new StringBuilder();
             var filter = new StringBuilder();
 
-            string Escape(string p) => p.Replace("\\", "/").Replace(":", "\\:");
+            string Escape(string p)
+            {
+                if (string.IsNullOrEmpty(p)) return "";
+                // 🔥 Hem slashları düzelt, hem de iki noktayı (: -> \:) koru!
+                return p.Replace("\\", "/").Replace(":", "\\:");
+            }
+
             string FloatStr(double val) => val.ToString("0.00", CultureInfo.InvariantCulture);
 
             // GİRDİLER
@@ -74,10 +239,9 @@ namespace Application.Services
                 sb.Append($"-i \"{visual.ImagePath}\" ");
             }
 
-            // FILTER COMPLEX
             sb.Append("-filter_complex \"");
 
-            // A) GÖRSELLER (Zoom/Pan)
+            // A) GÖRSEL EFEKTLER
             for (int i = 0; i < layout.VisualTrack.Count; i++)
             {
                 var v = layout.VisualTrack[i];
@@ -87,9 +251,9 @@ namespace Application.Services
                 double maxZoom = layout.Style.VisualEffectsSettings.ZoomIntensity;
                 if (maxZoom < 1.0) maxZoom = 1.1;
 
-                string zoomExpr;
-                if (v.EffectType == "zoom_in") zoomExpr = $"min(zoom+0.0015,{FloatStr(maxZoom)})";
-                else zoomExpr = $"if(eq(on,1),{FloatStr(maxZoom)},max(1.0,zoom-0.0015))";
+                string zoomExpr = v.EffectType == "zoom_in"
+                    ? $"min(zoom+0.0015,{FloatStr(maxZoom)})"
+                    : $"if(eq(on,1),{FloatStr(maxZoom)},max(1.0,zoom-0.0015))";
 
                 filter.Append($"[{idx}:v]scale=-2:4*ih,zoompan=z='{zoomExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={layout.Width}x{layout.Height}:fps={layout.Fps},setsar=1");
 
@@ -118,21 +282,22 @@ namespace Application.Services
                     "BottomLeft" => "x=20:y=H-h-20",
                     _ => "x=W-w-20:y=H-h-20"
                 };
-                string fontPath = GetFontPath("Arial-Bold");
+
+                // Watermark fontu için basit bir fallback (Arial)
+                string fontPath = Path.Combine(_assetsPath, "fonts", "Arial-Bold.ttf");
+                if (!File.Exists(fontPath)) fontPath = Directory.GetFiles(Path.Combine(_assetsPath, "fonts"), "*.ttf").FirstOrDefault() ?? "Arial";
+
                 string colorAss = HexToAssColor(branding.WatermarkColor, branding.Opacity);
                 filter.Append($"[v_joined]drawtext=fontfile='{Escape(fontPath)}':text='{branding.WatermarkText}':fontcolor={colorAss}:fontsize=24:{overlayPos}[v_branded];");
                 lastVideoLabel = "[v_branded]";
             }
 
-            // D) ALTYAZILAR (ASS - Stil Dosyanın İçinde)
+            // D) ALTYAZILAR
             var capSettings = layout.Style.CaptionSettings;
             if (capSettings.EnableCaptions)
             {
                 string assFile = Escape(subPath);
-                string fontFile = GetFontPath(capSettings.FontName);
-                string fontsDir = Escape(Path.GetDirectoryName(fontFile)!);
-
-                // Force Style SİLİNDİ, sadece dosya yolu ve font klasörü veriliyor.
+                string fontsDir = Escape(workDir); // 🔥 fontsdir = workDir
                 filter.Append($"{lastVideoLabel}subtitles='{assFile}':fontsdir='{fontsDir}'[v_final];");
             }
             else
@@ -140,7 +305,7 @@ namespace Application.Services
                 filter.Append($"{lastVideoLabel}null[v_final];");
             }
 
-            // E) SES
+            // E) SES MİKSAJI
             var mix = layout.Style.AudioMixSettings;
             if (musicPath != null)
             {
@@ -174,13 +339,12 @@ namespace Application.Services
             {
                 filter.Append($"[0:a]volume={FloatStr(mix.VoiceVolumePercent / 100.0)}[a_final]");
             }
+
             filter.Append("\"");
 
             // ÇIKTI
             sb.Append(filter.ToString());
             sb.Append(" -map \"[v_final]\" -map \"[a_final]\" ");
-
-            // GPU
             string gpuPreset = layout.Style.EncoderPreset switch { "fast" => "p3", "slow" => "p6", _ => "p4" };
             sb.Append($"-c:v h264_nvenc -preset {gpuPreset} ");
             sb.Append($"-b:v {layout.Style.BitrateKbps}k -maxrate {layout.Style.BitrateKbps + 1000}k -bufsize 10M ");
@@ -192,22 +356,25 @@ namespace Application.Services
             return sb.ToString();
         }
 
-        // -----------------------------------------------------------------------
-        // 🔥 DÜZELTİLMİŞ ASS GENERATOR (OKUNABİLİRLİK İÇİN)
-        // -----------------------------------------------------------------------
-        private async Task GenerateDynamicAssFileAsync(List<CaptionEvent> captions, string path, RenderCaptionSettings settings, string cultureCode)
+
+        // =================================================================
+        // 🔥 ASS GENERATOR (WORD MERGER + BLACK-ON-BLACK FIX)
+        // =================================================================
+        private async Task GenerateDynamicAssFileAsync(List<CaptionEvent> captions, string path, RenderCaptionSettings settings, string cultureCode, FontInfo fontInfo)
         {
             var sb = new StringBuilder();
-
-            // Culture Handling
             CultureInfo culture;
             try { culture = new CultureInfo(cultureCode); } catch { culture = new CultureInfo("en-US"); }
 
             // 1. FONT VE OKUNABİLİRLİK AYARLARI
             int finalFontSize = settings.FontSize;
-            if (finalFontSize < 75) finalFontSize = 75; // Okunabilirlik garantisi
+            if (finalFontSize < 75) finalFontSize = 75;
 
-            // --- HEADER ---
+            // ASS Formatında Bold/Italic (-1 = True)
+            int bold = fontInfo.IsBold ? -1 : 0;
+            int italic = fontInfo.IsItalic ? -1 : 0;
+            string familyName = fontInfo.FamilyName;
+
             sb.AppendLine("[Script Info]");
             sb.AppendLine("ScriptType: v4.00+");
             sb.AppendLine("WrapStyle: 2");
@@ -219,37 +386,25 @@ namespace Application.Services
             sb.AppendLine("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding");
 
             // RENKLER
-            string primary = HexToAssColor(settings.PrimaryColor); // Örn: Beyaz
-
-            // Eğer vurgu rengi Siyah ise (#000000), bunu yazı rengi yapmamalıyız!
-            // Sadece arka plan rengi olarak kullanacağız.
+            string primary = HexToAssColor(settings.PrimaryColor);
             string highlightBoxColor = HexToAssColor(settings.HighlightColor ?? "#000000", 1.0);
-
-            // Normal Outline rengi (Highlight kapalıyken)
             string normalOutlineColor = HexToAssColor(settings.OutlineColor);
 
-            // Kutu Ayarları
             string backColor = normalOutlineColor;
             int borderStyle = 1;
             int outlineSize = settings.OutlineSize;
-
-            // Harf Aralığı (Spacing): Kutu olunca harfler yapışmasın diye açıyoruz
             double spacing = 1.0;
 
             if (settings.EnableHighlight)
             {
-                // 🔥 Kutu Rengi = Vurgu Rengi (Siyah)
+                // Kutu Rengi = Siyah (Vurgu)
                 backColor = highlightBoxColor;
-
-                // Outline Kalınlığı: Çok kalın olursa yazıyı yer. %15 idealdir.
+                // İnceltilmiş Outline
                 outlineSize = (int)(finalFontSize * 0.15);
                 if (outlineSize < 5) outlineSize = 5;
-
-                // Kutu modunda harfleri biraz daha ayır ki oval arka planlar birbirine girmesin
+                // Harf aralığı
                 spacing = 3.0;
             }
-
-            string fontName = Path.GetFileNameWithoutExtension(settings.FontName);
 
             int align = settings.Position switch
             {
@@ -262,23 +417,23 @@ namespace Application.Services
             int marginV = settings.MarginBottom;
             if (align == 2 && marginV < 200) marginV = 200;
 
-            // Stil Tanımı
-            sb.AppendLine($"Style: Default,{fontName},{finalFontSize},{primary},&H000000FF,{backColor},&H00000000,1,0,0,0,100,100,{spacing},0,{borderStyle},{outlineSize},0,{align},20,20,{marginV},1");
+            // Style: FamilyName dinamik
+            sb.AppendLine($"Style: Default,{familyName},{finalFontSize},{primary},&H000000FF,{backColor},&H00000000,{bold},{italic},0,0,100,100,{spacing},0,{borderStyle},{outlineSize},0,{align},20,20,{marginV},1");
             sb.AppendLine();
 
             sb.AppendLine("[Events]");
             sb.AppendLine("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
 
-            // --- KELİME İŞLEME VE MANTIĞI ---
+            // --- KELİME BİRLEŞTİRME (MERGER) ---
             int targetWordCount = settings.MaxWordsPerLine > 0 ? settings.MaxWordsPerLine : 2;
 
+            // 1. Tüm kelimeleri düzleştir
             var flatWordList = new List<(string Word, double Start, double End)>();
 
             foreach (var cap in captions)
             {
                 string txt = settings.Uppercase ? cap.Text.ToUpper(culture) : cap.Text;
                 var words = txt.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
                 double totalDur = cap.End - cap.Start;
                 double perWord = totalDur / words.Length;
 
@@ -290,6 +445,7 @@ namespace Application.Services
                 }
             }
 
+            // 2. Grupla ve Yaz
             for (int i = 0; i < flatWordList.Count; i += targetWordCount)
             {
                 var chunk = flatWordList.Skip(i).Take(targetWordCount).ToList();
@@ -299,21 +455,8 @@ namespace Application.Services
                 double startTimeMs = chunk.First().Start * 1000;
                 double endTimeMs = chunk.Last().End * 1000;
 
-                // 🔥 KRİTİK DÜZELTME: ANİMASYON TAGLERİ
-                string animTags = "";
-                if (settings.EnableHighlight)
-                {
-                    // ESKİSİ (Hatalı): {{\\1c{highlightBoxColor}...}} -> Yazıyı SİYAH yapıyordu.
-
-                    // YENİSİ: Rengi değiştirme! Sadece Büyüt (Pop Up).
-                    // Yazı zaten Primary (Beyaz) kalacak, Arka Plan (Box) zaten Siyah tanımlandı.
-                    // \t(0,100,\fscx110\fscy110): İlk 100ms içinde %110 büyüt.
-                    animTags = "{\\t(0,100,\\fscx110\\fscy110)}";
-
-                    // İstersen opsiyonel: Vurgu rengi Siyah değilse (örn: Sarı), yazıyı Sarı yapabilirsin.
-                    // Ama senin UI'da "Vurgu" genelde kutu rengi olarak algılandığı için 
-                    // rengi değiştirmemek en güvenlisidir.
-                }
+                // Animasyon: Sadece Pop Up (Renk değişimi yok)
+                string animTags = settings.EnableHighlight ? "{\\t(0,100,\\fscx110\\fscy110)}" : "";
 
                 TimeSpan start = TimeSpan.FromMilliseconds(startTimeMs);
                 TimeSpan end = TimeSpan.FromMilliseconds(endTimeMs);
@@ -324,23 +467,7 @@ namespace Application.Services
             await File.WriteAllTextAsync(path, sb.ToString(), Encoding.UTF8);
         }
 
-        // Diğer helper metodlar (GetFontPath, HexToAssColor, BreakTextToLines, GenerateAudioListAsync, RunFFmpegProcessAsync, FormatAssTime)
-        // Bunları zaten önceden yazmıştık, aynılarını kullanabilirsin.
-        // Özellikle FormatAssTime metodunu class içine eklemeyi unutma.
-        private string FormatAssTime(TimeSpan t) => $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}.{t.Milliseconds / 10:D2}";
-
-        // ... (HexToAssColor vb. önceki koddan alabilirsin) ...
-        private string GetFontPath(string fontName)
-        {
-            // Önceki implementasyonun aynısı
-            string directPath = Path.Combine(_assetsPath, "fonts", fontName);
-            if (File.Exists(directPath)) return directPath;
-            string withExt = Path.Combine(_assetsPath, "fonts", fontName + ".ttf");
-            if (File.Exists(withExt)) return withExt;
-            var defaultFont = Directory.GetFiles(Path.Combine(_assetsPath, "fonts"), "*.ttf").FirstOrDefault();
-            return defaultFont ?? "Arial";
-        }
-
+        // --- HELPER METODLAR ---
         private string HexToAssColor(string hex, double opacity = 1.0)
         {
             if (string.IsNullOrEmpty(hex)) return "&H00FFFFFF";
@@ -351,6 +478,8 @@ namespace Application.Services
             string alphaHex = alphaInt.ToString("X2");
             return $"&H{alphaHex}{b}{g}{r}";
         }
+
+        private string FormatAssTime(TimeSpan t) => $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}.{t.Milliseconds / 10:D2}";
 
         private string? GetRandomMusicFile()
         {
@@ -372,7 +501,6 @@ namespace Application.Services
 
         private async Task RunFFmpegProcessAsync(string args, CancellationToken ct)
         {
-            // Önceki implementasyonun aynısı
             var p = new Process
             {
                 StartInfo = new ProcessStartInfo
