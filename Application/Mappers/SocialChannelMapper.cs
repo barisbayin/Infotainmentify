@@ -42,7 +42,9 @@ namespace Application.Mappers
                 // Frontend buna bakıp "Yeniden Giriş Yap" butonu çıkarabilir.
                 IsTokenExpired = e.TokenExpiresAt.HasValue && e.TokenExpiresAt < DateTimeOffset.UtcNow,
 
-                Scopes = e.Scopes
+                Scopes = e.Scopes,
+
+                EncryptedTokensJson = e.EncryptedTokensJson
 
                 // DİKKAT: Tokens/EncryptedTokensJson alanlarını buraya koymuyoruz.
                 // Güvenlik gereği dışarı çıkmamalı.

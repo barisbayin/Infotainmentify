@@ -19,5 +19,9 @@ namespace Application.Contracts.Script
         public string LanguageCode { get; set; } = "tr-TR";
 
         public int EstimatedDurationSec { get; set; }
+
+        public string? Description { get; set; } // Video açıklaması
+
+        public string? Tags { get; set; }
     }
 }

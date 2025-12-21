@@ -16,5 +16,7 @@ namespace Application.Contracts.Pipeline
 
         // Kullanıcı sıralı bir liste gönderir
         public List<SaveStageConfigDto> Stages { get; set; } = new();
+
+        public bool AutoPublish { get; set; }
     }
 }

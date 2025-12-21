@@ -1,7 +1,6 @@
 ﻿using Application.Executors;
 using Application.Pipeline;
 using Core.Contracts;
-using Core.Entity;
 using Core.Entity.Pipeline;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;

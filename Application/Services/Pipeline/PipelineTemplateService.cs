@@ -63,7 +63,8 @@ namespace Application.Services.Pipeline
             {
                 Name = dto.Name,
                 Description = dto.Description,
-                ConceptId = dto.ConceptId
+                ConceptId = dto.ConceptId,
+                AutoPublish = dto.AutoPublish,
                 // AppUserId BaseService'de set edilecek
             };
 
@@ -77,7 +78,8 @@ namespace Application.Services.Pipeline
                     {
                         StageType = stageDto.StageType,
                         PresetId = stageDto.PresetId,
-                        Order = order++ // Otomatik sıra numarası
+                        Order = order++, // Otomatik sıra numarası
+                        OptionsJson = stageDto.OptionsJson
                     });
                 }
             }
@@ -104,6 +106,7 @@ namespace Application.Services.Pipeline
             entity.Name = dto.Name;
             entity.Description = dto.Description;
             entity.ConceptId = dto.ConceptId;
+            entity.AutoPublish = dto.AutoPublish;
 
             // =================================================================
             // 🔥 AKILLI EŞİTLEME (SMART SYNC)
@@ -128,6 +131,7 @@ namespace Application.Services.Pipeline
                     existing.StageType = newVal.StageType;
                     existing.PresetId = newVal.PresetId == 0 ? null : newVal.PresetId;
                     existing.Order = i + 1;
+                    existing.OptionsJson = newVal.OptionsJson;
 
                     // Soft delete olmuşsa geri getir (Eğer sistemde varsa)
                     // existing.IsDeleted = false; 
@@ -140,7 +144,8 @@ namespace Application.Services.Pipeline
                     {
                         StageType = newVal.StageType,
                         PresetId = newVal.PresetId == 0 ? null : newVal.PresetId,
-                        Order = i + 1
+                        Order = i + 1,
+                        OptionsJson = newVal.OptionsJson
                         // TemplateId otomatik set edilir
                     });
                 }

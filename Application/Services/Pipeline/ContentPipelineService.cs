@@ -43,7 +43,8 @@ namespace Application.Services.Pipeline
                 AppUserId = userId,
                 TemplateId = request.TemplateId,
                 Status = ContentPipelineStatus.Pending,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                AutoPublish = template.AutoPublish
             };
 
             await _runRepo.AddAsync(run, ct);
@@ -123,20 +124,66 @@ namespace Application.Services.Pipeline
                 predicate: r => r.AppUserId == userId && (!conceptId.HasValue || r.Template.ConceptId == conceptId),
                 orderBy: r => r.CreatedAt,
                 desc: true,
-                include: x => x.Include(r => r.Template),
+                // 🔥 1. DEĞİŞİKLİK: Include zincirini genişletiyoruz
+                include: source => source
+                    .Include(r => r.Template)
+                        .ThenInclude(t => t.Concept) // Konsept Adı için
+                    .Include(r => r.StageExecutions)
+                        .ThenInclude(e => e.StageConfig), // İkonlar (Upload mu?) anlamak için
                 asNoTracking: true,
                 ct: ct
             );
 
+            // 🔥 2. DEĞİŞİKLİK: Mapleme (Mapping) işlemini güncelliyoruz
             return runs.Select(r => new PipelineRunListDto
             {
+                // -- Mevcut Alanlar --
                 Id = r.Id,
-                RunContextTitle = r.RunContextTitle,
                 TemplateName = r.Template?.Name ?? "Silinmiş Şablon",
                 Status = r.Status.ToString(),
                 StartedAt = r.StartedAt,
-                CompletedAt = r.CompletedAt
+                CompletedAt = r.CompletedAt,
+
+                // Başlık mantığı: Önce DB'deki başlığa bak, yoksa Script çıktısından bulmaya çalış, o da yoksa Şablon adını bas.
+                RunContextTitle = !string.IsNullOrEmpty(r.RunContextTitle)
+                    ? r.RunContextTitle
+                    : ExtractTitleFromScript(r.StageExecutions),
+
+                // -- Yeni Eklenen Alanlar --
+                ConceptName = r.Template?.Concept?.Name ?? "-",
+
+                // Frontend'deki ikonlar için gerekli liste
+                StageExecutions = r.StageExecutions.Select(e => new StageExecutionSummaryDto
+                {
+                    Id = e.Id,
+                    // StageConfig silinmişse patlamasın diye kontrol
+                    StageType = e.StageConfig?.StageType.ToString() ?? "Unknown",
+                    Status = e.Status.ToString(),
+                    OutputJson = e.OutputJson // Linkler bunun içinde
+                }).ToList()
             });
+        }
+
+        // --- YARDIMCI METOD (Sınıfın altına ekle) ---
+        private string? ExtractTitleFromScript(ICollection<StageExecution> executions)
+        {
+            // Script aşamasını bul
+            var scriptExec = executions.FirstOrDefault(x => x.StageConfig?.StageType == StageType.Script);
+
+            // Çıktısı varsa ve başarılıysa parse et
+            if (scriptExec != null && !string.IsNullOrEmpty(scriptExec.OutputJson))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(scriptExec.OutputJson);
+                    if (doc.RootElement.TryGetProperty("Title", out var titleProp))
+                    {
+                        return titleProp.GetString();
+                    }
+                }
+                catch { /* JSON bozuksa sessizce geç */ }
+            }
+            return null;
         }
 
         public async Task RetryStageAsync(int userId, int runId, string stageType, int? newPresetId = null, CancellationToken ct = default)
@@ -181,6 +228,32 @@ namespace Application.Services.Pipeline
                 }
             }
             return allLogs;
+        }
+
+        public async Task ApproveRunAsync(int runId, CancellationToken ct)
+        {
+            // 1. Run'ı bul
+            var run = await _runRepo.GetByIdAsync(runId);
+
+            if (run == null)
+                throw new KeyNotFoundException($"Pipeline Run with ID {runId} not found.");
+
+            // 2. Business Rule: Gerçekten onay mı bekliyor?
+            if (run.Status != ContentPipelineStatus.WaitingForApproval)
+            {
+                throw new InvalidOperationException("Bu işlem onay beklemiyor. Zaten çalışıyor, bitmiş veya hata almış.");
+            }
+
+            // 3. Statüyü güncelle (Kaldığı yerden devam etmesi için 'Processing' yapıyoruz)
+            run.Status = ContentPipelineStatus.Running;
+
+            // 4. Kaydet
+            await _uow.SaveChangesAsync(ct);
+
+            // 5. 🔥 MOTORU TETİKLE (Fire and Forget)
+            // Controller beklemesin diye Task.Run ile arka plana atıyoruz.
+            // Not: Kendi sınıfımız içindeki RunAsync'i (veya ExecuteRunAsync) çağırıyoruz.
+            FireAndForgetRun(run.Id);
         }
 
         // --- Helper: Background Job Başlatıcı ---

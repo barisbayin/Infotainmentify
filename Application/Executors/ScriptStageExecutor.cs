@@ -7,12 +7,8 @@ using Core.Entity;
 using Core.Entity.Pipeline;
 using Core.Entity.Presets;
 using Core.Enums;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace Application.Executors
 {
@@ -38,24 +34,20 @@ namespace Application.Executors
 
         public override StageType StageType => StageType.Script;
 
-        // 🔥 DÜZELTME 1: 'protected override' yaptık ve logAsync'i kullanıyoruz
         public override async Task<object?> ProcessAsync(
                  ContentPipelineRun run,
                  StageConfig config,
                  StageExecution exec,
                  PipelineContext context,
                  object? presetObj,
-                 Func<string, Task> logAsync, // 🔥 Canlı Log Fonksiyonu
+                 Func<string, Task> logAsync,
                  CancellationToken ct)
         {
             var preset = (ScriptPreset)presetObj!;
-
-            // 🔥 DÜZELTME 2: exec.AddLog yerine logAsync
             await logAsync($"📝 Starting Script Generation with preset: {preset.Name}");
 
             // 1. Topic Verisini Çek
             var topicPayload = context.GetOutput<TopicStagePayload>(StageType.Topic);
-
             if (topicPayload == null || string.IsNullOrEmpty(topicPayload.TopicText))
                 throw new InvalidOperationException("Önceki adımdan (Topic) veri alınamadı.");
 
@@ -64,12 +56,25 @@ namespace Application.Executors
             // 2. AI İstemcisi
             var aiClient = await _aiFactory.ResolveTextClientAsync(run.AppUserId, preset.UserAiConnectionId, ct);
 
-            // 3. System Prompt
+            // =================================================================
+            // 🔥 REVİZE 1: PROMPT YAPISI (Array yerine Object istiyoruz)
+            // =================================================================
             var systemPrompt = !string.IsNullOrWhiteSpace(preset.SystemInstruction)
                 ? preset.SystemInstruction
                 : "You are an expert video scriptwriter.";
 
-            systemPrompt += "\nIMPORTANT: Output MUST be a valid JSON array of objects (scenes). No markdown.";
+            // Formatı netleştiriyoruz: Metadata + Scenes
+            systemPrompt += @"
+IMPORTANT: Output MUST be a valid JSON OBJECT with this exact structure:
+{
+  ""title"": ""Viral YouTube Shorts Title"",
+  ""description"": ""SEO optimized description with keywords"",
+  ""tags"": [""#tag1"", ""#tag2"", ""#tag3""],
+  ""scenes"": [
+    { ""scene"": 1, ""visual"": ""..."", ""audio"": ""..."", ""duration"": 5 }
+  ]
+}
+Do not use markdown blocks.";
 
             // 4. User Prompt
             var userPrompt = preset.PromptTemplate
@@ -93,47 +98,83 @@ namespace Application.Executors
 
             await logAsync("✨ AI response received. Parsing JSON...");
 
-            // 6. JSON Parse ve Temizlik
+            // =================================================================
+            // 🔥 REVİZE 2: JSON PARSE (Object -> Metadata + Scenes Array)
+            // =================================================================
             var cleanJson = CleanJson(responseJson);
             var scenes = new List<ScriptSceneItem>();
             var fullTextBuilder = new StringBuilder();
 
+            // Yeni değişkenlerimiz
+            string aiTitle = "";
+            string aiDescription = "";
+            List<string> aiTags = new();
+
             try
             {
                 using var doc = JsonDocument.Parse(cleanJson);
-                foreach (var element in doc.RootElement.EnumerateArray())
+                var root = doc.RootElement;
+
+                // A) Metadata Okuma
+                aiTitle = GetStr(root, "title");
+                aiDescription = GetStr(root, "description");
+
+                // Tags Okuma
+                if (root.TryGetProperty("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array)
                 {
-                    var audio = GetStr(element, "audio");
-                    scenes.Add(new ScriptSceneItem
+                    foreach (var t in tagsEl.EnumerateArray()) aiTags.Add(t.GetString() ?? "");
+                }
+
+                // B) Sahneleri Okuma
+                if (root.TryGetProperty("scenes", out var scenesEl) && scenesEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var element in scenesEl.EnumerateArray())
                     {
-                        SceneNumber = GetInt(element, "scene"),
-                        VisualPrompt = GetStr(element, "visual"),
-                        AudioText = audio,
-                        EstimatedDuration = GetInt(element, "duration")
-                    });
-                    fullTextBuilder.AppendLine(audio);
+                        var audio = GetStr(element, "audio");
+                        scenes.Add(new ScriptSceneItem
+                        {
+                            SceneNumber = GetInt(element, "scene"),
+                            VisualPrompt = GetStr(element, "visual"),
+                            AudioText = audio,
+                            EstimatedDuration = GetInt(element, "duration")
+                        });
+                        fullTextBuilder.AppendLine(audio);
+                    }
+                }
+                else
+                {
+                    throw new Exception("JSON içinde 'scenes' dizisi bulunamadı.");
                 }
             }
             catch (Exception ex)
             {
-                // Hata durumunda canlı loga basalım
                 await logAsync($"❌ JSON Parse Error: {ex.Message}");
-                throw new InvalidOperationException($"AI geçersiz JSON döndürdü. Hata: {ex.Message}\nRaw: {responseJson}");
+                // Debug için ham veriyi loga basabiliriz (kısa halini)
+                var preview = responseJson.Length > 200 ? responseJson.Substring(0, 200) + "..." : responseJson;
+                throw new InvalidOperationException($"AI geçersiz JSON döndürdü: {ex.Message}. Raw: {preview}");
             }
 
             // 7. DB'ye Kayıt
+            // Eğer Script tablosunda Description/Tags sütunu yoksa şimdilik Content veya Title'a sığdırmayalım.
+            // Ama Payload'a koyacağımız için sonraki aşama bunları kullanabilecek.
+
+            // Eğer Title boş geldiyse Topic'i kullan
+            if (string.IsNullOrEmpty(aiTitle)) aiTitle = topicPayload.TopicText;
+
             var scriptEntity = new Script
             {
                 AppUserId = run.AppUserId,
                 TopicId = topicPayload.TopicId,
-                Title = topicPayload.TopicText.Length > 50 ? topicPayload.TopicText[..47] + "..." : topicPayload.TopicText,
+                Title = aiTitle.Length > 250 ? aiTitle[..247] + "..." : aiTitle, // DB limitine dikkat
                 Content = fullTextBuilder.ToString(),
                 ScenesJson = JsonSerializer.Serialize(scenes),
                 LanguageCode = preset.Language,
                 EstimatedDurationSec = scenes.Sum(x => x.EstimatedDuration),
                 SourcePresetId = preset.Id,
                 CreatedByRunId = run.Id,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                Description = aiDescription,
+                Tags = JsonSerializer.Serialize(aiTags)
             };
 
             await _scriptRepo.AddAsync(scriptEntity, ct);
@@ -141,20 +182,27 @@ namespace Application.Executors
 
             await logAsync($"✅ Script saved. ID: {scriptEntity.Id}, Total Scenes: {scenes.Count}");
 
-            // 8. Pipeline Devamı İçin Payload Dönüşü
+            // =================================================================
+            // 🔥 REVİZE 3: PAYLOAD'I DOLU DOLU DÖNMEK
+            // =================================================================
             return new ScriptStagePayload
             {
                 ScriptId = scriptEntity.Id,
-                Title = scriptEntity.Title,
+                Title = aiTitle,
                 FullScriptText = scriptEntity.Content,
-                Scenes = scenes
+                Scenes = scenes,
+
+                // Upload aşaması için altın değerindeki veriler:
+                Description = aiDescription,
+                Tags = aiTags
             };
         }
 
-        // --- HELPERS (Değişiklik yok) ---
+        // --- HELPERS ---
         private string CleanJson(string text)
         {
             text = text.Trim();
+            // Markdown temizliği
             if (text.StartsWith("```json")) text = text.Replace("```json", "").Replace("```", "");
             else if (text.StartsWith("```")) text = text.Replace("```", "");
             return text.Trim();

@@ -51,7 +51,9 @@ namespace WebAPI.Controllers
                 Content = dto.Content,
                 ScenesJson = dto.ScenesJson,
                 LanguageCode = dto.LanguageCode,
-                EstimatedDurationSec = dto.EstimatedDurationSec
+                EstimatedDurationSec = dto.EstimatedDurationSec,
+                Tags = dto.Tags,
+                Description = dto.Description
             };
 
             await _service.AddAsync(entity, User.GetUserId(), ct);
@@ -72,6 +74,8 @@ namespace WebAPI.Controllers
             entity.ScenesJson = dto.ScenesJson;
             entity.LanguageCode = dto.LanguageCode;
             entity.EstimatedDurationSec = dto.EstimatedDurationSec;
+            entity.Tags = dto.Tags;
+            entity.Description = dto.Description;
 
             await _service.UpdateAsync(entity, userId, ct);
             return NoContent();

@@ -34,6 +34,8 @@ namespace Core.Entity.Pipeline
         // Detaylar ise StageExecution içindeki loglarda olacak.
         public string? ErrorMessage { get; set; }
 
+        public bool AutoPublish { get; set; }
+
         // ==========================================================
         // ALT ELEMANLAR (Detaylı Loglar)
         // ==========================================================

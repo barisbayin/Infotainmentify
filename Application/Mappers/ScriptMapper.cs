@@ -24,7 +24,9 @@ namespace Application.Mappers
             ScenesJson = e.ScenesJson,
             LanguageCode = e.LanguageCode,
             EstimatedDurationSec = e.EstimatedDurationSec,
-            CreatedAt = e.CreatedAt
+            CreatedAt = e.CreatedAt,
+            Description = e.Description,
+            Tags = e.Tags
         };
     }
 }

@@ -7,5 +7,6 @@
         public string ConceptName { get; set; } = default!; // Hangi konsept?
         public int StageCount { get; set; }
         public DateTime CreatedAt { get; set; }
+        public bool AutoPublish { get; set; } = false;
     }
 }

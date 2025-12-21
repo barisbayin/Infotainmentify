@@ -10,5 +10,6 @@ namespace Application.Contracts.Pipeline
 
         public int Order { get; set; }
         public int? PresetId { get; set; }
+        public string? OptionsJson { get; set; }
     }
 }

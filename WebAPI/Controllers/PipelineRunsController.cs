@@ -2,6 +2,7 @@
 using Application.Extensions;
 using Application.Models;
 using Application.Services.Interfaces;
+using Core.Enums;
 using Google.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -103,6 +104,32 @@ namespace WebAPI.Controllers
                 ct
             );
             return Ok(new { message = "Re-render işlemi başlatıldı." });
+        }
+
+
+        [HttpPost("{runId}/approve")]
+        public async Task<IActionResult> ApproveRun(int runId, CancellationToken ct)
+        {
+            try
+            {
+                // Tüm işi servise yıktık
+                await _pipelineService.ApproveRunAsync(runId, ct);
+
+                return Ok(new { message = "🚀 Onay verildi, süreç kaldığı yerden devam ediyor!" });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("Pipeline Run bulunamadı.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                // "Onay beklemiyor" hatası buradan döner
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal Server Error", details = ex.Message });
+            }
         }
     }
 }

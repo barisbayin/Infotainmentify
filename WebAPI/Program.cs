@@ -95,6 +95,7 @@ namespace WebAPI
             // Extension method ile tüm [AiProvider] servislerini kaydet
             // (ServiceCollectionExtensions.cs dosyasýnda tanýmlamýþtýk)
             builder.Services.AddInfotainmentifyAiServices();
+            builder.Services.AddInfotainmentifyUploadServices();
 
             // Extension method ile tüm [StageExecutor] sýnýflarýný kaydet
             builder.Services.AddInfotainmentifyExecutors();

@@ -11,5 +11,6 @@ namespace Application.Services.Interfaces
         Task<IEnumerable<PipelineRunListDto>> ListRunsAsync(int userId, int? conceptId, CancellationToken ct);
         Task RetryStageAsync(int userId, int runId, string stageType, int? newPresetId = null, CancellationToken ct = default);
         Task<List<string>> GetRunLogsAsync(int runId);
+        Task ApproveRunAsync(int runId, CancellationToken ct);
     }
 }

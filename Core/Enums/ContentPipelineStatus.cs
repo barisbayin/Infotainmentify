@@ -7,6 +7,7 @@
         Completed = 2,      // Başarıyla bitti
         Failed = 3,         // Hata aldı
         Cancelled = 4,      // Kullanıcı iptal etti
-        Draft = 5           // Henüz çalıştırılmaya hazır değil (Taslak)
+        Draft = 5,           // Henüz çalıştırılmaya hazır değil (Taslak)
+        WaitingForApproval = 6 // Onay bekliyor (İnsan onayı gereken durumlar için)
     }
 }

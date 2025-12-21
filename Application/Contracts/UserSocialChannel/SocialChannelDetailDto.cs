@@ -13,5 +13,6 @@ namespace Application.Contracts.UserSocialChannel
         public bool IsTokenExpired { get; set; }
         public DateTimeOffset? TokenExpiresAt { get; set; }
         public string? Scopes { get; set; }
+        public string? EncryptedTokensJson { get; set; }
     }
 }

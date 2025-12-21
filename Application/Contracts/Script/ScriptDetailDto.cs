@@ -10,5 +10,7 @@
         public string LanguageCode { get; set; } = default!;
         public int EstimatedDurationSec { get; set; }
         public DateTime CreatedAt { get; set; }
+        public string? Description { get; set; } // Video açıklaması
+        public string? Tags { get; set; }
     }
 }

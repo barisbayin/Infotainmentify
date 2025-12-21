@@ -11,7 +11,8 @@ namespace Application.Mappers
             Name = e.Name,
             ConceptName = e.Concept?.Name ?? "-", // Concept Include edilmeli
             StageCount = e.StageConfigs?.Count ?? 0,
-            CreatedAt = e.CreatedAt
+            CreatedAt = e.CreatedAt,
+            AutoPublish = e.AutoPublish
         };
 
         public static PipelineTemplateDetailDto ToDetailDto(this ContentPipelineTemplate e) => new()
@@ -22,6 +23,7 @@ namespace Application.Mappers
             ConceptId = e.ConceptId,
             CreatedAt = e.CreatedAt,
             UpdatedAt = e.UpdatedAt,
+            AutoPublish = e.AutoPublish,
             Stages = e.StageConfigs?
                 .OrderBy(s => s.Order)
                 .Select(s => new StageConfigDto
@@ -29,7 +31,8 @@ namespace Application.Mappers
                     Id = s.Id,
                     StageType = s.StageType.ToString(),
                     Order = s.Order,
-                    PresetId = s.PresetId
+                    PresetId = s.PresetId,
+                    OptionsJson = s.OptionsJson
                 }).ToList() ?? new List<StageConfigDto>()
         };
     }

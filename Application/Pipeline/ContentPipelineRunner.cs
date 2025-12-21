@@ -55,7 +55,6 @@ namespace Application.Pipeline
                 // SignalR hatası ana akışı bozmasın (Fire & Forget)
             }
         }
-
         // -----------------------------------------------------------------------
         // 🚀 MAIN RUN METHOD
         // -----------------------------------------------------------------------
@@ -77,10 +76,13 @@ namespace Application.Pipeline
             // Zaten bitmişse tekrar çalıştırma
             if (run.Status == ContentPipelineStatus.Completed) return;
 
-            // Durumu güncelle ve kaydet
-            run.Status = ContentPipelineStatus.Running;
-            run.StartedAt ??= DateTime.UtcNow;
-            await _uow.SaveChangesAsync(ct);
+            // Durumu güncelle (Eğer WaitingForApproval ise, Service katmanı zaten Processing yapmıştı, dokunmuyoruz)
+            if (run.Status != ContentPipelineStatus.WaitingForApproval)
+            {
+                run.Status = ContentPipelineStatus.Running;
+                run.StartedAt ??= DateTime.UtcNow;
+                await _uow.SaveChangesAsync(ct);
+            }
 
             // Başlangıç Logu
             await _notifier.SendLogAsync(run.Id, "🚀 Pipeline execution started...");
@@ -95,12 +97,11 @@ namespace Application.Pipeline
                 var exec = run.StageExecutions.FirstOrDefault(x => x.StageConfigId == stageConfig.Id);
 
                 // --- [CRITICAL] REFRESH LOGIC (Ghost Run Önleme) ---
-                // Eğer exec varsa, veritabanından TAZE durumunu çekip hafızadaki nesneyi güncelliyoruz.
                 if (exec != null)
                 {
                     var freshExec = await _stageExecRepo.FirstOrDefaultAsync(
                         predicate: x => x.Id == exec.Id,
-                        asNoTracking: true, // Cache delmek için
+                        asNoTracking: true,
                         ct: ct
                     );
 
@@ -109,6 +110,7 @@ namespace Application.Pipeline
                         exec.Status = freshExec.Status;
                         exec.RetryCount = freshExec.RetryCount;
                         exec.OutputJson = freshExec.OutputJson;
+                        exec.Error = freshExec.Error;
                     }
                 }
                 // ----------------------------------------------------
@@ -126,26 +128,26 @@ namespace Application.Pipeline
                     await _uow.SaveChangesAsync(ct);
                 }
 
-                // EĞER TAMAMLANMIŞSA -> Context'i doldur ve geç
+                // A) EĞER TAMAMLANMIŞSA -> Context'i doldur ve GEÇ (Resume Mantığı)
                 if (exec.Status == StageStatus.Completed)
                 {
                     HydrateContext(context, stageConfig.StageType, exec.OutputJson);
-                    // İstersen burayı da loglayabilirsin ama çok kalabalık etmesin diye kapalı
-                    // await LogAsync(exec, $"⏩ Stage {stageConfig.StageType} already completed. Loading context...");
+                    // Zaten biten aşamalar için döngünün sonundaki "Fren Kontrolü"ne girmeden devam et.
+                    // Bu sayede Onay sonrası tekrar başladığında Render'ı atlar, direkt Upload'a gider.
                     continue;
                 }
 
-                // EĞER ÖLMÜŞSE (PermanentlyFailed) -> Tüm Run'ı durdur
+                // B) EĞER ÖLMÜŞSE (PermanentlyFailed) -> Tüm Run'ı durdur
                 if (exec.Status == StageStatus.PermanentlyFailed)
                 {
                     run.Status = ContentPipelineStatus.Failed;
                     run.ErrorMessage = $"Pipeline stopped because stage failed: {stageConfig.StageType}";
                     await _uow.SaveChangesAsync(ct);
-                    await _notifier.SendLogAsync(run.Id, $"❌ Pipeline stopped. Stage {stageConfig.StageType} is marked as failed.");
+                    await _notifier.SendLogAsync(run.Id, $"❌ Pipeline stopped. Stage {stageConfig.StageType} failed.");
                     return;
                 }
 
-                // 🔥 STAGE ÇALIŞTIR 🔥
+                // C) 🔥 STAGE ÇALIŞTIR (Esas İşlem) 🔥
                 var success = await ExecuteStageAsync(run, stageConfig, exec, context, ct);
 
                 if (!success)
@@ -156,6 +158,35 @@ namespace Application.Pipeline
                     await _notifier.SendLogAsync(run.Id, $"❌ Pipeline Failed at {stageConfig.StageType}.");
                     return;
                 }
+
+                // =================================================================
+                // 🛑 FREN MEKANİZMASI (MANUEL ONAY KONTROLÜ)
+                // =================================================================
+                // Stage başarıyla bitti. Şimdi "Sıradaki Adım Upload mu?" diye bakıyoruz.
+
+                var nextStage = stages.FirstOrDefault(s => s.Order > stageConfig.Order);
+
+                if (nextStage != null && nextStage.StageType == StageType.Upload)
+                {
+                    // 🔥 KRİTİK KARAR: AutoPublish AÇIK MI KAPALI MI?
+
+                    if (run.AutoPublish)
+                    {
+                        // Otomatik Yayın Açık -> Durmak yok, yola devam! 🏎️
+                        await _notifier.SendLogAsync(run.Id, "⏩ Auto-Publish enabled. Proceeding to Upload immediately...");
+                    }
+                    else
+                    {
+                        // Otomatik Yayın Kapalı -> FREN! 🛑
+                        await _notifier.SendLogAsync(run.Id, "✋ Render completed. Stopping for manual approval (AutoPublish: OFF).");
+
+                        run.Status = ContentPipelineStatus.WaitingForApproval;
+                        await _uow.SaveChangesAsync(ct);
+
+                        return; // Metottan çık, worker dursun.
+                    }
+                }
+                // =================================================================
             }
 
             // Hepsi başarıyla bitti

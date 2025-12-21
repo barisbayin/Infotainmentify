@@ -22,6 +22,8 @@ namespace Core.Entity.Pipeline
         [MaxLength(500)]
         public string? Description { get; set; }
 
+        public bool AutoPublish { get; set; } = false;
+
         // ==========================================
         // ALT ELEMANLAR (Malzemeler ve Çıktılar)
         // ==========================================

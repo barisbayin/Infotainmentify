@@ -2,6 +2,7 @@
 using Application.AiLayer.Concrete;
 using Application.Attributes;
 using Application.Executors;
+using Application.Services.Interfaces;
 using Core.Attributes;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
@@ -49,6 +50,33 @@ namespace Application.Extensions
 
             // Factory'i de kaydet
             services.AddScoped<IAiGeneratorFactory, AiGeneratorFactory>();
+
+            return services;
+        }
+
+
+        public static IServiceCollection AddInfotainmentifyUploadServices(this IServiceCollection services)
+        {
+            // ISocialPlatformService'in olduğu assembly'i al
+            var assembly = Assembly.GetAssembly(typeof(ISocialPlatformService))!;
+
+            // 1. FİLTRELEME MANTIĞINI DEĞİŞTİR
+            // Attribute yerine, Interface implementasyonuna bakıyoruz.
+            var uploadServices = assembly.GetTypes()
+                .Where(t => typeof(ISocialPlatformService).IsAssignableFrom(t) // Interface'i miras almış mı?
+                            && t.IsClass
+                            && !t.IsAbstract);
+
+            foreach (var type in uploadServices)
+            {
+                // 2. KAYIT MANTIĞINI DEĞİŞTİR
+                // Sadece "type" değil, "Interface -> Type" şeklinde eşleştiriyoruz.
+                // Böylece: services.AddScoped<ISocialPlatformService, YouTubeUploaderService>(); yapmış gibi oluyoruz.
+
+                services.AddScoped(typeof(ISocialPlatformService), type);
+
+                Console.WriteLine($"[Social] Uploader Registered: {type.Name}");
+            }
 
             return services;
         }

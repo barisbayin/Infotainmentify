@@ -43,5 +43,15 @@ namespace Core.Entity
 
         // Tahmini okuma/izleme süresi (Saniye)
         public int EstimatedDurationSec { get; set; }
+
+
+        // 🔥 YENİ EKLENEN ALANLAR
+        // ---------------------------------------------------------
+        [MaxLength(1000)]
+        public string? Description { get; set; } // Video açıklaması
+
+        [MaxLength(1000)]
+        public string? Tags { get; set; } // JSON formatında tutacağız: ["#shorts", "#ai"]
+        // ---------------------------------------------------------
     }
 }
