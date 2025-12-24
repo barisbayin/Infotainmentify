@@ -64,17 +64,17 @@ namespace Application.Executors
                 : "You are an expert video scriptwriter.";
 
             // Formatı netleştiriyoruz: Metadata + Scenes
-            systemPrompt += @"
-IMPORTANT: Output MUST be a valid JSON OBJECT with this exact structure:
-{
-  ""title"": ""Viral YouTube Shorts Title"",
-  ""description"": ""SEO optimized description with keywords"",
-  ""tags"": [""#tag1"", ""#tag2"", ""#tag3""],
-  ""scenes"": [
-    { ""scene"": 1, ""visual"": ""..."", ""audio"": ""..."", ""duration"": 5 }
-  ]
-}
-Do not use markdown blocks.";
+//            systemPrompt += @"
+//IMPORTANT: Output MUST be a valid JSON OBJECT with this exact structure:
+//{
+//  ""title"": ""Viral YouTube Shorts Title"",
+//  ""description"": ""SEO optimized description with keywords"",
+//  ""tags"": [""#tag1"", ""#tag2"", ""#tag3""],
+//  ""scenes"": [
+//    { ""scene"": 1, ""visual"": ""..."", ""audio"": ""..."", ""duration"": 5 }
+//  ]
+//}
+//Do not use markdown blocks.";
 
             // 4. User Prompt
             var userPrompt = preset.PromptTemplate

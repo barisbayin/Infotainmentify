@@ -88,6 +88,8 @@ namespace WebAPI
             builder.Services.AddScoped<ContentPipelineRunner>(); // Orkestra Þefi
             builder.Services.AddScoped<PipelineTemplateService>();
 
+
+            builder.Services.AddScoped<IImageGeneratorService, ImageGeneratorService>();
             // =========================================================
             // 3. AI & EXECUTOR LAYER (OTOMATÝK KAYIT)
             // =========================================================

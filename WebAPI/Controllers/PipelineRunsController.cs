@@ -131,5 +131,42 @@ namespace WebAPI.Controllers
                 return StatusCode(500, new { error = "Internal Server Error", details = ex.Message });
             }
         }
+
+        [HttpPost("{runId}/scenes/{sceneIndex}/regenerate")]
+        public async Task<IActionResult> RegenerateSceneImage(
+            [FromRoute] int runId,
+            [FromRoute] int sceneIndex,
+            CancellationToken ct)
+        {
+            try
+            {
+                // Servisteki metodu çağırıyoruz
+                // Dönüş değeri: Yeni üretilen görselin dosya yolu (string)
+                var newImagePath = await _pipelineService.RegenerateSceneImageAsync(runId, sceneIndex, ct);
+
+                // Frontend'e JSON olarak dönüyoruz
+                return Ok(new
+                {
+                    message = "✅ Görsel başarıyla yenilendi!",
+                    url = newImagePath,
+                    sceneIndex = sceneIndex
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                // Run veya Preset bulunamazsa 404
+                return NotFound(new { error = ex.Message });
+            }
+            catch (IndexOutOfRangeException ex)
+            {
+                // Olmayan bir sahne numarası gelirse 400
+                return BadRequest(new { error = "Geçersiz sahne numarası.", details = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                // Diğer hatalar (AI hatası, dosya yazma hatası vs.)
+                return StatusCode(500, new { error = "Görsel üretilirken bir hata oluştu.", details = ex.Message });
+            }
+        }
     }
 }

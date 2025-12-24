@@ -4,6 +4,7 @@ using Application.Models;
 using Application.Services.Interfaces;
 using Core.Contracts;
 using Core.Entity.Pipeline;
+using Core.Entity.Presets;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,19 +19,25 @@ namespace Application.Services.Pipeline
         private readonly IUnitOfWork _uow;
         private readonly IServiceProvider _sp; // Background job için
         private readonly IContentPipelineRunner _runner; // Retry için
+        private readonly IImageGeneratorService _imageGenService;
+        private readonly IRepository<ImagePreset> _imagePresetRepo;
 
         public ContentPipelineService(
             IRepository<ContentPipelineTemplate> templateRepo,
             IRepository<ContentPipelineRun> runRepo,
             IUnitOfWork uow,
             IServiceProvider sp,
-            IContentPipelineRunner runner)
+            IContentPipelineRunner runner,
+            IImageGeneratorService imageGenService,
+            IRepository<ImagePreset> imagePresetRepo)
         {
             _templateRepo = templateRepo;
             _runRepo = runRepo;
             _uow = uow;
             _sp = sp;
             _runner = runner;
+            _imageGenService = imageGenService;
+            _imagePresetRepo = imagePresetRepo;
         }
 
         public async Task<int> CreateRunAsync(int userId, CreatePipelineRunRequest request, CancellationToken ct)
@@ -272,6 +279,112 @@ namespace Application.Services.Pipeline
                     Console.WriteLine($"[BACKGROUND ERROR] Run #{runId}: {ex}");
                 }
             });
+        }
+
+        public async Task<string> RegenerateSceneImageAsync(int runId, int sceneIndex, CancellationToken ct)
+        {
+            // 1. Run'ı ve ImageStage outputunu bul
+            var run = await _runRepo.FirstOrDefaultAsync(
+                predicate: r => r.Id == runId,
+                include: src => src
+                    .Include(x => x.StageExecutions)
+                    .ThenInclude(x => x.StageConfig),
+                asNoTracking: false, // Update yapacağız, tracking açık kalsın
+                ct: ct
+            );
+
+            if (run == null) throw new KeyNotFoundException("Run bulunamadı.");
+
+            // Image Stage'ini bul
+            var imageExec = run.StageExecutions.FirstOrDefault(x => x.StageConfig.StageType == StageType.Image);
+            if (imageExec == null) throw new InvalidOperationException("Image stage bulunamadı.");
+
+            // Preset Verisini ID ile Çekme
+            int presetId = imageExec.StageConfig.PresetId ?? 0;
+            if (presetId == 0) throw new InvalidOperationException("Bu aşama için bir Preset ID tanımlanmamış.");
+
+            var preset = await _imagePresetRepo.GetByIdAsync(presetId);
+            if (preset == null) throw new KeyNotFoundException($"Preset (ID: {presetId}) veritabanında bulunamadı.");
+
+            // 2. Mevcut Image JSON'ı Deserialize et
+            if (string.IsNullOrEmpty(imageExec.OutputJson)) throw new InvalidOperationException("Henüz görsel üretilmemiş.");
+
+            var payload = JsonSerializer.Deserialize<ImageStagePayload>(imageExec.OutputJson);
+            if (payload == null || payload.SceneImages == null) throw new InvalidOperationException("Görsel verisi bozuk.");
+
+            if (sceneIndex < 0 || sceneIndex >= payload.SceneImages.Count)
+                throw new IndexOutOfRangeException("Geçersiz sahne indeksi.");
+
+            var targetScene = payload.SceneImages[sceneIndex];
+
+            // 3. AI ile YENİ RESİM ÜRET
+            string newImagePath = await _imageGenService.GenerateAndSaveImageAsync(
+                userId: run.AppUserId,
+                runId: run.Id,
+                sceneNumber: targetScene.SceneNumber,
+                prompt: targetScene.PromptUsed,
+                connectionId: preset.UserAiConnectionId,
+                preset: preset,
+                ct: ct
+            );
+
+            // 4. Image Listesini Güncelle
+            targetScene.ImagePath = newImagePath;
+
+            // Image JSON'ı tekrar paketle ve DB'ye yazılmaya hazır hale getir
+            imageExec.OutputJson = JsonSerializer.Serialize(payload);
+
+            // =================================================================================
+            // 🔥 KRİTİK EKLEME: SCENE LAYOUT (TIMELINE) PATCH İŞLEMİ
+            // Bunu yapmazsan Render alırken eski resmi kullanmaya devam eder!
+            // =================================================================================
+            var layoutExec = run.StageExecutions.FirstOrDefault(x => x.StageConfig.StageType == StageType.SceneLayout);
+
+            if (layoutExec != null && !string.IsNullOrEmpty(layoutExec.OutputJson))
+            {
+                try
+                {
+                    var layoutPayload = JsonSerializer.Deserialize<SceneLayoutStagePayload>(layoutExec.OutputJson);
+
+                    // Layout içindeki ilgili sahneyi bul (SceneIndex eşleşmesi)
+                    // Not: targetScene.SceneNumber senin sisteminde 1'den başlıyorsa burası doğrudur.
+                    var visualItem = layoutPayload?.VisualTrack?.FirstOrDefault(x => x.SceneIndex == targetScene.SceneNumber);
+
+                    if (visualItem != null)
+                    {
+                        // Sadece yolu değiştiriyoruz, süreler ve efektler korunuyor
+                        visualItem.ImagePath = newImagePath;
+
+                        // Güncellenmiş Layout JSON'ını geri yaz
+                        layoutExec.OutputJson = JsonSerializer.Serialize(layoutPayload);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Layout güncelleme hatası akışı bozmasın, loglayıp geçebilirsin
+                    Console.WriteLine($"[Warning] Layout patch failed: {ex.Message}");
+                }
+            }
+            // =================================================================================
+
+            // 6. RENDER'ı Güncelliğini Yitirdi (Outdated) Olarak İşaretle
+            var renderExec = run.StageExecutions.FirstOrDefault(x => x.StageConfig.StageType == StageType.Render);
+
+            if (renderExec != null)
+            {
+                // Eğer render daha önce tamamlanmışsa veya hata almışsa,
+                // yeni resim geldiği için artık "Eski" (Outdated) durumuna düşer.
+                if (renderExec.Status == StageStatus.Completed || renderExec.Status == StageStatus.Failed)
+                {
+                    renderExec.Status = StageStatus.Outdated;
+                }
+                // Eğer zaten Pending veya Processing ise dokunmaya gerek yok.
+            }
+
+            // Değişiklikleri Kaydet (Hem ImageStage, Hem SceneLayout, Hem RenderStatus)
+            await _uow.SaveChangesAsync(ct);
+
+            return newImagePath;
         }
     }
 }

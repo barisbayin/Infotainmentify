@@ -12,5 +12,6 @@ namespace Application.Services.Interfaces
         Task RetryStageAsync(int userId, int runId, string stageType, int? newPresetId = null, CancellationToken ct = default);
         Task<List<string>> GetRunLogsAsync(int runId);
         Task ApproveRunAsync(int runId, CancellationToken ct);
+        Task<string> RegenerateSceneImageAsync(int runId, int sceneIndex, CancellationToken ct);
     }
 }
