@@ -29,16 +29,18 @@ namespace Application.Executors
             ContentPipelineRun run, StageConfig config, StageExecution exec, PipelineContext context,
             object? presetObj, Func<string, Task> logAsync, CancellationToken ct)
         {
-            await logAsync("🚀 Smart Multi-Platform Upload Started...");
+            await logAsync("Çoklu platform yükleme aşaması başladı.");
 
             // 1. AYARLARI OKU
-            if (string.IsNullOrEmpty(config.OptionsJson)) throw new InvalidOperationException("Upload options empty!");
+            if (string.IsNullOrEmpty(config.OptionsJson)) throw new InvalidOperationException("Upload ayarları boş.");
             var options = JsonSerializer.Deserialize<UploadStageOptions>(config.OptionsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (options == null || !options.Targets.Any()) throw new InvalidOperationException("No upload targets defined!");
+            if (options == null || !options.Targets.Any()) throw new InvalidOperationException("Upload hedefi tanımlanmamış.");
+
+            await logAsync($"Upload hedef sayısı: {options.Targets.Count}.");
 
             // 2. KAYNAK VERİLERİ (Video & Script)
             var renderOutput = context.GetOutput<RenderStagePayload>(StageType.Render);
-            if (renderOutput == null || !File.Exists(renderOutput.VideoFilePath)) throw new FileNotFoundException("Video file not found!");
+            if (renderOutput == null || !File.Exists(renderOutput.VideoFilePath)) throw new FileNotFoundException("Video dosyası bulunamadı.");
 
             var scriptOutput = context.GetOutput<ScriptStagePayload>(StageType.Script);
 
@@ -46,6 +48,8 @@ namespace Application.Executors
             string aiTitle = scriptOutput?.Title ?? "New Video";
             string aiDesc = scriptOutput?.Description ?? "";
             List<string> aiTags = scriptOutput?.Tags ?? new List<string>();
+            ThumbnailStagePayload? thumbnailOutput = null;
+            try { thumbnailOutput = context.GetOutput<ThumbnailStagePayload>(StageType.Thumbnail); } catch { }
 
             // 3. SERVİSLERİ HAZIRLA
             var platformServices = _serviceProvider.GetServices<ISocialPlatformService>();
@@ -58,13 +62,13 @@ namespace Application.Executors
                 var channel = await _channelRepo.GetByIdAsync(target.SocialChannelId);
                 if (channel == null)
                 {
-                    await logAsync($"⚠️ Channel ID {target.SocialChannelId} not found. Skipping.");
+                    await logAsync(PipelineLiveLog.Warning($"Kanal bulunamadı. Kanal ID: {target.SocialChannelId}. Hedef atlanıyor."));
                     continue;
                 }
 
                 try
                 {
-                    await logAsync($"🛠️ Preparing metadata for {channel.ChannelName} ({channel.ChannelType})...");
+                    await logAsync($"Metadata hazırlanıyor. Kanal: {channel.ChannelName} ({channel.ChannelType}).");
 
                     // B) METADATA HARMANLAMA (TEMPLATE ENGINE)
                     // Şablon varsa işle, yoksa ham veriyi kullan
@@ -96,16 +100,17 @@ namespace Application.Executors
                         Description = finalDesc,
                         Tags = finalTags,
                         PrivacyStatus = target.PrivacyStatus ?? options.DefaultPrivacy,
-                        ThumbnailPath = null // İleride custom thumbnail seçilirse buraya gelir
+                        ThumbnailPath = thumbnailOutput?.ThumbnailFilePath
                     };
 
                     // C) UPLOAD SERVİSİNİ BUL VE ÇALIŞTIR
                     var uploader = platformServices.FirstOrDefault(x => x.Type == channel.ChannelType);
-                    if (uploader == null) throw new NotSupportedException($"No service for {channel.ChannelType}");
+                    if (uploader == null) throw new NotSupportedException($"{channel.ChannelType} için upload servisi bulunamadı.");
 
+                    await logAsync($"Video yükleme başladı. Kanal: {channel.ChannelName}, gizlilik: {metadata.PrivacyStatus}.");
                     string url = await uploader.UploadAsync(channel, renderOutput.VideoFilePath, metadata, ct);
 
-                    await logAsync($"✅ UPLOADED: {channel.ChannelName} -> {url}");
+                    await logAsync(PipelineLiveLog.Success($"Video yüklendi. Kanal: {channel.ChannelName}, URL: {url}."));
 
                     results.Uploads.Add(new UploadResultItem
                     {
@@ -117,7 +122,7 @@ namespace Application.Executors
                 }
                 catch (Exception ex)
                 {
-                    await logAsync($"❌ FAIL: {channel.ChannelName} - {ex.Message}");
+                    await logAsync(PipelineLiveLog.Error($"Video yükleme başarısız oldu. Kanal: {channel.ChannelName}, hata: {ex.Message}"));
                     results.Uploads.Add(new UploadResultItem
                     {
                         Platform = channel.ChannelType.ToString(),

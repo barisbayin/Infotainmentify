@@ -14,6 +14,11 @@ namespace Application.Contracts.Pipeline
         [Required]
         public int ConceptId { get; set; }
 
+        [MaxLength(40)]
+        public string ProductionProfile { get; set; } = "Generic";
+
+        public string? WorkflowLayoutJson { get; set; }
+
         // Kullanıcı sıralı bir liste gönderir
         public List<SaveStageConfigDto> Stages { get; set; } = new();
 

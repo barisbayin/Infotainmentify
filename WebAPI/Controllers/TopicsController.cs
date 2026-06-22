@@ -50,6 +50,7 @@ namespace WebAPI.Controllers
                 Title = dto.Title,
                 Premise = dto.Premise,
                 LanguageCode = dto.LanguageCode,
+                ConceptId = dto.ConceptId,
                 Category = dto.Category,
                 SubCategory = dto.SubCategory,
                 Series = dto.Series,
@@ -78,6 +79,7 @@ namespace WebAPI.Controllers
             topic.Title = dto.Title;
             topic.Premise = dto.Premise;
             topic.LanguageCode = dto.LanguageCode;
+            topic.ConceptId = dto.ConceptId;
             topic.Category = dto.Category;
             topic.SubCategory = dto.SubCategory;
             topic.Series = dto.Series;

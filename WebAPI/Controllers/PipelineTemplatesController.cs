@@ -4,6 +4,7 @@ using Application.Services.Pipeline;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Application.Mappers;
+using System.Text.Json;
 
 namespace WebAPI.Controllers
 {
@@ -36,6 +37,13 @@ namespace WebAPI.Controllers
             return entity is null ? NotFound() : Ok(entity.ToDetailDto());
         }
 
+        [HttpGet("{id}/health")]
+        public async Task<IActionResult> GetHealth(int id, CancellationToken ct)
+        {
+            var health = await _service.GetHealthAsync(id, User.GetUserId(), ct);
+            return health is null ? NotFound() : Ok(health);
+        }
+
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] SavePipelineTemplateDto dto, CancellationToken ct)
         {
@@ -48,6 +56,24 @@ namespace WebAPI.Controllers
         {
             await _service.UpdateAsync(id, dto, User.GetUserId(), ct);
             return NoContent();
+        }
+
+        [HttpPut("{id}/workflow-layout")]
+        public async Task<IActionResult> UpdateWorkflowLayout(int id, [FromBody] UpdateWorkflowLayoutDto dto, CancellationToken ct)
+        {
+            try
+            {
+                await _service.UpdateWorkflowLayoutAsync(id, dto, User.GetUserId(), ct);
+                return NoContent();
+            }
+            catch (JsonException)
+            {
+                return BadRequest("Workflow layout JSON gecersiz.");
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
         }
 
         [HttpDelete("{id}")]

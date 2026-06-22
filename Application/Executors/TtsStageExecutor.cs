@@ -41,7 +41,7 @@ namespace Application.Executors
             var preset = (TtsPreset)presetObj!;
 
             // 🔥 DÜZELTME 2: exec.AddLog -> logAsync
-            await logAsync($"🗣️ Starting TTS (Text-to-Speech) with preset: {preset.Name} ({preset.VoiceId})");
+            await logAsync($"Seslendirme hazırlanıyor. Preset: {preset.Name}, ses: {preset.VoiceId}, dil: {preset.LanguageCode}.");
 
             // 1. Script Verisini Çek
             var scriptData = context.GetOutput<ScriptStagePayload>(StageType.Script);
@@ -57,7 +57,7 @@ namespace Application.Executors
             var results = new List<SceneAudioItem>();
             int successCount = 0;
 
-            await logAsync($"Found {scriptData.Scenes.Count} scenes to synthesize.");
+            await logAsync($"Seslendirilecek sahne sayısı: {scriptData.Scenes.Count}.");
 
             // 4. Döngü: Her sahne için ses üret
             foreach (var scene in scriptData.Scenes)
@@ -67,11 +67,11 @@ namespace Application.Executors
                 // Eğer seslendirilecek metin yoksa atla
                 if (string.IsNullOrWhiteSpace(scene.AudioText))
                 {
-                    await logAsync($"⚠️ Scene {scene.SceneNumber}: No audio text, skipping.");
+                    await logAsync(PipelineLiveLog.Warning($"Sahne {scene.SceneNumber} için seslendirilecek metin yok. Sahne atlanıyor."));
                     continue;
                 }
 
-                await logAsync($"🔊 Generating audio for Scene {scene.SceneNumber} ({scene.AudioText.Length} chars)...");
+                await logAsync($"Sahne {scene.SceneNumber} sesi üretiliyor. Metin uzunluğu: {scene.AudioText.Length} karakter.");
 
                 try
                 {
@@ -101,12 +101,12 @@ namespace Application.Executors
                     });
 
                     successCount++;
-                    await logAsync($"✅ Scene {scene.SceneNumber} audio ready.");
+                    await logAsync(PipelineLiveLog.Success($"Sahne {scene.SceneNumber} sesi hazır. Dosya: {fileName}."));
                 }
                 catch (Exception ex)
                 {
                     // Hata logu
-                    await logAsync($"❌ ERROR Scene {scene.SceneNumber}: {ex.Message}");
+                    await logAsync(PipelineLiveLog.Error($"Sahne {scene.SceneNumber} ses üretimi başarısız oldu. Hata: {ex.Message}"));
                     // Hata olsa da devam et (Diğer sahneler üretilsin)
                 }
 
@@ -117,7 +117,7 @@ namespace Application.Executors
             if (successCount == 0)
                 throw new Exception("Hiçbir ses dosyası üretilemedi.");
 
-            await logAsync($"🎉 TTS Completed. Total Files: {successCount}");
+            await logAsync(PipelineLiveLog.Success($"Seslendirme tamamlandı. Üretilen dosya sayısı: {successCount}."));
 
             return new TtsStagePayload
             {

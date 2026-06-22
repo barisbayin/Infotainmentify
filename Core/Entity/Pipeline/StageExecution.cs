@@ -55,7 +55,19 @@ namespace Core.Entity.Pipeline
         /// </summary>
         public void AddLog(string message)
         {
-            var logEntry = $"{DateTime.UtcNow:HH:mm:ss} - {message}";
+            if (_runtimeLogs.Count == 0 && !string.IsNullOrWhiteSpace(LogsJson))
+            {
+                try
+                {
+                    _runtimeLogs = JsonSerializer.Deserialize<List<string>>(LogsJson) ?? new List<string>();
+                }
+                catch
+                {
+                    _runtimeLogs = new List<string>();
+                }
+            }
+
+            var logEntry = $"{DateTime.Now:HH:mm:ss} - {message}";
             _runtimeLogs.Add(logEntry);
 
             // Basit bir serialization (Production'da daha optimize yapılabilir)
@@ -66,7 +78,7 @@ namespace Core.Entity.Pipeline
         {
             Status = StageStatus.Running;
             StartedAt = DateTime.UtcNow;
-            AddLog("Stage Started.");
+            AddLog("[INFO] Aşama başlatıldı.");
         }
 
         public void MarkCompleted(object? outputData = null)
@@ -85,7 +97,7 @@ namespace Core.Entity.Pipeline
                 OutputJson = JsonSerializer.Serialize(outputData);
             }
 
-            AddLog($"Stage Completed in {DurationMs}ms.");
+            AddLog($"[OK] Aşama tamamlandı. Süre: {DurationMs} ms.");
         }
 
         public void MarkFailed(string errorMessage)
@@ -93,7 +105,7 @@ namespace Core.Entity.Pipeline
             Status = StageStatus.Failed;
             FinishedAt = DateTime.UtcNow;
             Error = errorMessage;
-            AddLog($"FATAL ERROR: {errorMessage}");
+            AddLog($"[HATA] Kritik hata: {errorMessage}");
         }
     }
 }

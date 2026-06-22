@@ -10,6 +10,11 @@
         // Videonun URL'i (Frontend'de oynatmak için)
         public string VideoUrl { get; set; } = default!;
 
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public int Fps { get; set; }
+        public string AspectRatio { get; set; } = default!;
+
         public double FileSizeMb { get; set; }
         public double Duration { get; set; }
     }

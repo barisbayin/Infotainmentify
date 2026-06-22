@@ -6,6 +6,7 @@ using Core.Contracts;
 using Core.Entity.Pipeline;
 using Core.Enums;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
 using System.Reflection;
 
 namespace Application.Executors
@@ -45,24 +46,42 @@ namespace Application.Executors
             // Miras alan sınıflar bunu çağırınca hem DB'ye hem SignalR'a gider.
             Func<string, Task> logAsync = async (message) =>
             {
+                var normalizedMessage = PipelineLiveLog.Info(message);
+
                 // 1. Veritabanı
-                exec.AddLog(message);
+                exec.AddLog(normalizedMessage);
 
                 // 2. SignalR (Eğer Runner bir callback verdiyse)
                 if (logCallback != null)
                 {
-                    await logCallback(message);
+                    await logCallback(normalizedMessage);
                 }
             };
 
             try
             {
+                var stageName = PipelineLiveLog.StageName(config.StageType);
+                var watch = Stopwatch.StartNew();
+
                 exec.MarkStarted();
-                // "Executor started" logunu da canlıya atalım
-                await logAsync($"🚀 Executor started: {GetType().Name}");
+                await logAsync($"Aşama başlatıldı: {stageName}.");
 
                 // Preset çek
+                if (config.PresetId.HasValue)
+                {
+                    await logAsync($"Preset yükleniyor. Preset ID: {config.PresetId.Value}.");
+                }
+
                 var preset = await LoadPresetAsync(config);
+
+                if (config.PresetId.HasValue)
+                {
+                    await logAsync($"Preset yüklendi: {PipelineLiveLog.PresetName(preset)}.");
+                }
+                else
+                {
+                    await logAsync("Bu aşama preset kullanmadan çalışıyor.");
+                }
 
                 // Ana işi çalıştır (logAsync'i içeri paslıyoruz)
                 var result = await ProcessAsync(pipeline, config, exec, context, preset, logAsync, ct);
@@ -71,11 +90,13 @@ namespace Application.Executors
                 if (result != null)
                 {
                     context.SetOutput(config.StageType, result);
+                    await logAsync("Aşama çıktısı üretildi ve sonraki adımlar için hafızaya alındı.");
                 }
 
                 // Stage tamamlandı
                 exec.MarkCompleted(result);
-                await logAsync($"✅ {GetType().Name} completed successfully.");
+                watch.Stop();
+                await logAsync(PipelineLiveLog.Success($"Aşama tamamlandı: {stageName}. Süre: {exec.DurationMs ?? (int)watch.ElapsedMilliseconds} ms."));
 
                 return new StageResult
                 {
@@ -88,7 +109,7 @@ namespace Application.Executors
                 exec.MarkFailed(ex.Message);
 
                 // Hatayı da canlı terminale kırmızı basalım
-                await logAsync($"❌ {GetType().Name} Error: {ex.Message}");
+                await logAsync(PipelineLiveLog.Error($"Aşama hata verdi: {PipelineLiveLog.StageName(config.StageType)}. Hata: {ex.Message}"));
 
                 return new StageResult
                 {

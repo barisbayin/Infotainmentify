@@ -65,10 +65,10 @@ namespace Core.Entity
         // Script ve Image aşamaları bu ipuçlarını kullanır.
         // --------------------------------------------------------
 
-        [MaxLength(64)]
+        [MaxLength(512)]
         public string? Tone { get; set; }          // "Mysterious", "Upbeat"
 
-        [MaxLength(64)]
+        [MaxLength(512)]
         public string? RenderStyle { get; set; }   // "Cinematic", "PixelArt"
 
         [MaxLength(4000)]

@@ -39,7 +39,7 @@ namespace Application.Executors
             var preset = (SttPreset)presetObj!;
 
             // 🔥 DÜZELTME 2: exec.AddLog -> logAsync
-            await logAsync($"🎧 Starting STT (Speech-to-Text) with preset: {preset.Name}");
+            await logAsync($"Altyazı analizi hazırlanıyor. Preset: {preset.Name}, model: {preset.ModelName}, dil: {preset.LanguageCode}.");
 
             // 1. TTS Çıktısını Al
             var ttsPayload = context.GetOutput<TtsStagePayload>(StageType.Tts);
@@ -60,11 +60,11 @@ namespace Application.Executors
 
                 if (!File.Exists(audioItem.AudioFilePath))
                 {
-                    await logAsync($"⚠️ Warning: Audio file not found for Scene {audioItem.SceneNumber}");
+                    await logAsync(PipelineLiveLog.Warning($"Sahne {audioItem.SceneNumber} ses dosyası bulunamadı. Sahne atlanıyor."));
                     continue;
                 }
 
-                await logAsync($"🗣️ Transcribing Scene {audioItem.SceneNumber}...");
+                await logAsync($"Sahne {audioItem.SceneNumber} konuşma analizi başladı.");
 
                 try
                 {
@@ -88,12 +88,12 @@ namespace Application.Executors
 
                     successCount++;
                     // Log
-                    await logAsync($"✅ Scene {audioItem.SceneNumber} transcribed. Words: {sttResult.Words.Count}");
+                    await logAsync(PipelineLiveLog.Success($"Sahne {audioItem.SceneNumber} konuşma analizi tamamlandı. Kelime sayısı: {sttResult.Words.Count}."));
                 }
                 catch (Exception ex)
                 {
                     // Hata logu
-                    await logAsync($"❌ ERROR Scene {audioItem.SceneNumber}: {ex.Message}");
+                    await logAsync(PipelineLiveLog.Error($"Sahne {audioItem.SceneNumber} konuşma analizi başarısız oldu. Hata: {ex.Message}"));
                 }
 
                 // Rate limit
@@ -104,7 +104,7 @@ namespace Application.Executors
                 throw new Exception("Hiçbir altyazı üretilemedi.");
 
             var finalSubtitles = subBuilder.Build();
-            await logAsync($"🎉 STT Completed. Total Words: {finalSubtitles.Count}");
+            await logAsync(PipelineLiveLog.Success($"Altyazı analizi tamamlandı. Toplam kelime sayısı: {finalSubtitles.Count}."));
 
             return new SttStagePayload
             {

@@ -32,13 +32,13 @@ namespace Application.Contracts.Topics
         public string? TagsJson { get; set; }
 
         // Kullanıcı manuel olarak ton/stil girebilir
-        [MaxLength(64)]
+        [MaxLength(512)]
         public string? Tone { get; set; }
 
-        [MaxLength(64)]
+        [MaxLength(512)]
         public string? RenderStyle { get; set; }
 
-        [MaxLength(256)]
+        [MaxLength(4000)]
         public string? VisualPromptHint { get; set; }
     }
 }

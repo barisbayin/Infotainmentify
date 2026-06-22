@@ -22,7 +22,12 @@ namespace Core.Entity.Pipeline
         [MaxLength(500)]
         public string? Description { get; set; }
 
+        [MaxLength(40)]
+        public string ProductionProfile { get; set; } = "Generic";
+
         public bool AutoPublish { get; set; } = false;
+
+        public string? WorkflowLayoutJson { get; set; }
 
         // ==========================================
         // ALT ELEMANLAR (Malzemeler ve Çıktılar)

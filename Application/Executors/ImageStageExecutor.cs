@@ -15,6 +15,7 @@ namespace Application.Executors
     {
         private readonly IAiGeneratorFactory _aiFactory;
         private readonly IUserDirectoryService _dirService;
+        private const int SceneCooldownMs = 2500;
 
         public ImageStageExecutor(
             IServiceProvider sp,
@@ -41,14 +42,14 @@ namespace Application.Executors
             var preset = (ImagePreset)presetObj!;
 
             // 🔥 DÜZELTME 2: exec.AddLog yerine logAsync kullanıyoruz
-            await logAsync($"🎨 Starting Image Generation with preset: {preset.Name} ({preset.ModelName})");
+            await logAsync($"Görsel üretimi hazırlanıyor. Preset: {preset.Name}, model: {preset.ModelName}, boyut: {preset.Size}.");
 
             // 1. Önceki Adımdan (Script) Veriyi Çek
             var scriptData = context.GetOutput<ScriptStagePayload>(StageType.Script);
             if (scriptData == null || scriptData.Scenes == null || !scriptData.Scenes.Any())
                 throw new InvalidOperationException("Script verisi bulunamadı veya sahneler boş.");
 
-            await logAsync($"Found {scriptData.Scenes.Count} scenes to visualize.");
+            await logAsync($"Görsel üretilecek sahne sayısı: {scriptData.Scenes.Count}.");
 
             // 2. AI İstemcisi
             var aiClient = await _aiFactory.ResolveImageClientAsync(run.AppUserId, preset.UserAiConnectionId, ct);
@@ -59,6 +60,7 @@ namespace Application.Executors
    
 
             var results = new List<SceneImageItem>();
+            var failures = new List<string>();
             int successCount = 0;
 
             // 4. Döngü (Sahneleri işle)
@@ -66,7 +68,7 @@ namespace Application.Executors
             {
                 if (ct.IsCancellationRequested) break;
 
-                await logAsync($"🖌️ Generating image for Scene {scene.SceneNumber}...");
+                await logAsync($"Sahne {scene.SceneNumber} için görsel üretimi başladı.");
 
                 // Prompt Hazırla
                 var finalPrompt = preset.PromptTemplate
@@ -74,15 +76,20 @@ namespace Application.Executors
                     .Replace("{ArtStyle}", preset.ArtStyle ?? "cinematic")
                     .Trim();
 
+                await logAsync($"Sahne {scene.SceneNumber} prompt hazırlandı: {PipelineLiveLog.Shorten(finalPrompt, 220)}");
+
                 try
                 {
                     // AI Çağrısı
-                    var imageBytes = await aiClient.GenerateImageAsync(
+                    var imageBytes = await AiImageRetryPolicy.GenerateImageAsync(
+                        aiClient: aiClient,
+                        operationLabel: $"Sahne {scene.SceneNumber}",
                         prompt: finalPrompt,
                         negativePrompt: preset.NegativePrompt,
                         size: preset.Size,
                         style: preset.ArtStyle,
                         model: preset.ModelName,
+                        logAsync: logAsync,
                         ct: ct
                     );
 
@@ -101,32 +108,42 @@ namespace Application.Executors
 
                     successCount++;
                     // Başarılı log
-                    await logAsync($"✅ Scene {scene.SceneNumber} ready: {fileName}");
+                    await logAsync(PipelineLiveLog.Success($"Sahne {scene.SceneNumber} görseli hazır. Dosya: {fileName}."));
                 }
                 catch (Exception ex)
                 {
-                    var errorMsg = $"❌ Scene {scene.SceneNumber} generation failed. Error: {ex.Message}";
+                    var errorMsg = PipelineLiveLog.Error($"Sahne {scene.SceneNumber} görsel üretimi başarısız oldu. Hata: {ex.Message}");
 
                     // Güvenlik filtresi uyarısı
                     if (ex.Message.Contains("safety") || ex.Message.Contains("content") || ex.Message.Contains("NO_IMAGE"))
                     {
-                        errorMsg += " [OLASI SEBEP: Prompt içindeki yasaklı kelimeler (die, blood, shave vb.)]";
+                        errorMsg += " Olası sebep: prompt içindeki güvenlik filtresine takılan kelimeler.";
                     }
 
                     // Hata logunu canlıya bas
                     await logAsync(errorMsg);
+                    failures.Add(errorMsg);
 
                     // Not: Burası catch bloğu olduğu için BaseExecutor zaten bu exception'ı yakalamayacak 
                     // (çünkü biz burada yuttuk ve logladık). Eğer sahneyi atlayıp devam etmek istiyorsak
                     // 'throw' demeden devam ediyoruz. (Fallback mantığı için)
                 }
 
-                // API'yi boğmamak için minik bekleme
-                await Task.Delay(1000, ct);
+                // API kotasını yormamak için sahneler arasında kısa bir nefes.
+                await Task.Delay(SceneCooldownMs, ct);
             }
 
             if (successCount == 0)
-                throw new Exception("Hiçbir görsel üretilemedi. Lütfen API ayarlarını veya kotanızı kontrol edin.");
+            {
+                var lastFailure = failures.LastOrDefault();
+                var detail = string.IsNullOrWhiteSpace(lastFailure)
+                    ? "Detay logu bulunamadı."
+                    : lastFailure;
+
+                throw new Exception($"Hiçbir görsel üretilemedi. Son hata: {detail}");
+            }
+
+            await logAsync(PipelineLiveLog.Success($"Görsel üretimi tamamlandı. Başarılı sahne: {successCount}/{scriptData.Scenes.Count}."));
 
             // 5. Sonuç Dön
             return new ImageStagePayload

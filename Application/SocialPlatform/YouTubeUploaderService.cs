@@ -88,7 +88,33 @@ namespace Application.SocialPlatform
 
             // 5. SONUÇ
             var videoId = videosInsertRequest.ResponseBody.Id;
+            await TrySetThumbnailAsync(youtubeService, videoId, metadata.ThumbnailPath, ct);
+
             return $"https://www.youtube.com/watch?v={videoId}";
+        }
+
+        private static async Task TrySetThumbnailAsync(YouTubeService youtubeService, string videoId, string? thumbnailPath, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(thumbnailPath) || !File.Exists(thumbnailPath))
+                return;
+
+            try
+            {
+                var mimeType = Path.GetExtension(thumbnailPath).ToLowerInvariant() switch
+                {
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".webp" => "image/webp",
+                    _ => "image/png"
+                };
+
+                await using var thumbStream = new FileStream(thumbnailPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var thumbnailRequest = youtubeService.Thumbnails.Set(videoId, thumbStream, mimeType);
+                await thumbnailRequest.UploadAsync(ct);
+            }
+            catch
+            {
+                // Thumbnail failure should not invalidate an already uploaded video.
+            }
         }
 
         // --- HELPER: JSON PARSE ---

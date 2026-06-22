@@ -1,5 +1,6 @@
 ﻿using Application.Abstractions;
 using Application.Models;
+using Application.Pipeline;
 using Core.Entity;
 using Core.Entity.Models;
 using Core.Enums;
@@ -11,6 +12,9 @@ namespace Application.Services
 {
     public class FFmpegVideoService : IVideoRendererService
     {
+        private const int MaxVisualsPerRenderChunk = 24;
+        private const int MaxCommandLengthBeforeChunking = 22000;
+
         private readonly string _assetsPath;
 
         public FFmpegVideoService()
@@ -18,13 +22,21 @@ namespace Application.Services
             _assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ALL_FILES", "Assets");
         }
 
-        public async Task<string> RenderVideoAsync(SceneLayoutStagePayload layout, string outputPath, string cultureCode = "en-US", CancellationToken ct = default)
+        public async Task<string> RenderVideoAsync(
+            SceneLayoutStagePayload layout,
+            string outputPath,
+            string cultureCode = "en-US",
+            CancellationToken ct = default,
+            Func<string, Task>? logAsync = null)
         {
             var tempId = Guid.NewGuid().ToString("N")[..8];
             var workDir = Path.GetDirectoryName(outputPath)!;
 
             var srtPath = Path.Combine(workDir, $"subs_{tempId}.ass");
             var audioListPath = Path.Combine(workDir, $"audio_{tempId}.txt");
+            var fontsDir = Path.Combine(workDir, $"fonts_{tempId}");
+
+            NormalizeLayoutMediaPaths(layout, workDir);
 
             // =================================================================
             // 🔥 FONT OPERASYONU (DEDEKTİF MODU)
@@ -40,8 +52,9 @@ namespace Application.Services
 
             // 3. Dosyayı temiz bir isimle (örn: Poppins.ttf) workDir'e kopyala
             // Böylece ASS dosyası "Poppins" aradığında, yanındaki dosyayı bulacak.
+            Directory.CreateDirectory(fontsDir);
             string cleanFileName = $"{fontInfo.FamilyName}.ttf";
-            string localFontPath = Path.Combine(workDir, cleanFileName);
+            string localFontPath = Path.Combine(fontsDir, cleanFileName);
 
             if (File.Exists(originalFontPath) && !File.Exists(localFontPath))
             {
@@ -62,15 +75,17 @@ namespace Application.Services
 
             try
             {
-                // ASS oluştur (FontInfo ile Bold/Italic bilgisini gönderiyoruz)
-                await GenerateDynamicAssFileAsync(layout.CaptionTrack, srtPath, layout.Style.CaptionSettings, cultureCode, fontInfo);
-
-                await GenerateAudioListAsync(layout.AudioTrack, audioListPath);
-
-                // FFmpeg Komutu (fontsdir = workDir)
-                var args = BuildFFmpegCommand(layout, srtPath, audioListPath, musicPath, outputPath, workDir);
-
-                await RunFFmpegProcessAsync(args, ct);
+                var renderInChunks = ShouldRenderInChunks(layout, srtPath, audioListPath, musicPath, outputPath, fontsDir);
+                if (renderInChunks)
+                {
+                    await SafeLogAsync(logAsync, PipelineLiveLog.Warning("FFmpeg komutu uzun/yoğun görünüyor. Render parçalara bölünerek alınacak."));
+                    await RenderChunkedAsync(layout, workDir, tempId, musicPath, outputPath, fontsDir, cultureCode, fontInfo, ct, logAsync);
+                }
+                else
+                {
+                    await SafeLogAsync(logAsync, "FFmpeg tek geçiş render modu kullanılacak.");
+                    await RenderSinglePassAsync(layout, srtPath, audioListPath, musicPath, outputPath, fontsDir, cultureCode, fontInfo, ct, logAsync);
+                }
 
                 return outputPath;
             }
@@ -78,8 +93,273 @@ namespace Application.Services
             {
                 if (File.Exists(srtPath)) File.Delete(srtPath);
                 if (File.Exists(audioListPath)) File.Delete(audioListPath);
-                if (File.Exists(localFontPath)) File.Delete(localFontPath);
+                if (Directory.Exists(fontsDir)) Directory.Delete(fontsDir, recursive: true);
             }
+        }
+
+        private bool ShouldRenderInChunks(
+            SceneLayoutStagePayload layout,
+            string subPath,
+            string audioListPath,
+            string? musicPath,
+            string outputPath,
+            string fontsDir)
+        {
+            if (layout.VisualTrack.Count > MaxVisualsPerRenderChunk) return true;
+
+            var args = BuildFFmpegCommand(layout, subPath, audioListPath, musicPath, outputPath, fontsDir, preferHardwareEncoder: true);
+            return args.Length > MaxCommandLengthBeforeChunking;
+        }
+
+        private async Task RenderSinglePassAsync(
+            SceneLayoutStagePayload layout,
+            string subPath,
+            string audioListPath,
+            string? musicPath,
+            string outputPath,
+            string fontsDir,
+            string cultureCode,
+            FontInfo fontInfo,
+            CancellationToken ct,
+            Func<string, Task>? logAsync)
+        {
+            await GenerateDynamicAssFileAsync(layout.CaptionTrack, subPath, layout.Style.CaptionSettings, cultureCode, fontInfo, layout.Width, layout.Height);
+            await GenerateAudioListAsync(layout.AudioTrack, audioListPath);
+            await RunFFmpegWithFallbackAsync(layout, subPath, audioListPath, musicPath, outputPath, fontsDir, ct, logAsync);
+        }
+
+        private async Task RenderChunkedAsync(
+            SceneLayoutStagePayload layout,
+            string workDir,
+            string tempId,
+            string? musicPath,
+            string outputPath,
+            string fontsDir,
+            string cultureCode,
+            FontInfo fontInfo,
+            CancellationToken ct,
+            Func<string, Task>? logAsync)
+        {
+            var chunkDir = Path.Combine(workDir, $"chunks_{tempId}");
+            Directory.CreateDirectory(chunkDir);
+
+            var chunkFiles = new List<string>();
+
+            try
+            {
+                var orderedVisuals = layout.VisualTrack
+                    .OrderBy(v => v.StartTime)
+                    .ThenBy(v => v.SceneIndex)
+                    .ToList();
+
+                var totalChunks = (int)Math.Ceiling(orderedVisuals.Count / (double)MaxVisualsPerRenderChunk);
+                await SafeLogAsync(logAsync, $"Parçalı render başladı. Toplam parça: {totalChunks}, görsel vuruş: {orderedVisuals.Count}.");
+
+                var chunkIndex = 0;
+                for (var i = 0; i < orderedVisuals.Count; i += MaxVisualsPerRenderChunk)
+                {
+                    var chunkVisuals = orderedVisuals
+                        .Skip(i)
+                        .Take(MaxVisualsPerRenderChunk)
+                        .ToList();
+
+                    if (chunkVisuals.Count == 0) continue;
+
+                    chunkIndex++;
+                    var chunkStart = chunkVisuals.Min(v => v.StartTime);
+                    var chunkEnd = chunkVisuals.Max(v => v.StartTime + v.Duration);
+                    var chunkLayout = BuildChunkLayout(layout, chunkVisuals, chunkStart, chunkEnd);
+
+                    var chunkSubPath = Path.Combine(chunkDir, $"subs_{chunkIndex:000}.ass");
+                    var chunkAudioListPath = Path.Combine(chunkDir, $"audio_{chunkIndex:000}.txt");
+                    var chunkOutputPath = Path.Combine(chunkDir, $"chunk_{chunkIndex:000}.mp4");
+
+                    await SafeLogAsync(logAsync, $"Render parçası işleniyor: {chunkIndex}/{totalChunks}. Süre: {chunkLayout.TotalDuration:F1} sn, görsel vuruş: {chunkLayout.VisualTrack.Count}.");
+                    await RenderSinglePassAsync(chunkLayout, chunkSubPath, chunkAudioListPath, musicPath, chunkOutputPath, fontsDir, cultureCode, fontInfo, ct, logAsync);
+                    chunkFiles.Add(chunkOutputPath);
+                }
+
+                if (chunkFiles.Count == 0)
+                    throw new InvalidOperationException("Chunk render icin sahne bulunamadi.");
+
+                if (chunkFiles.Count == 1)
+                {
+                    await SafeLogAsync(logAsync, PipelineLiveLog.Success("Tek render parçası üretildi. Final dosyaya kopyalanıyor."));
+                    File.Copy(chunkFiles[0], outputPath, overwrite: true);
+                    return;
+                }
+
+                await ConcatenateChunksAsync(chunkFiles, outputPath, chunkDir, ct, logAsync);
+            }
+            finally
+            {
+                if (Directory.Exists(chunkDir)) Directory.Delete(chunkDir, recursive: true);
+            }
+        }
+
+        private static SceneLayoutStagePayload BuildChunkLayout(
+            SceneLayoutStagePayload source,
+            List<VisualEvent> chunkVisuals,
+            double chunkStart,
+            double chunkEnd)
+        {
+            var chunkSceneIndexes = chunkVisuals.Select(v => v.SceneIndex).ToHashSet();
+
+            return new SceneLayoutStagePayload
+            {
+                Width = source.Width,
+                Height = source.Height,
+                Fps = source.Fps,
+                TotalDuration = chunkVisuals.Sum(v => v.Duration),
+                Style = source.Style,
+                VisualTrack = chunkVisuals.Select(v => new VisualEvent
+                {
+                    SceneIndex = v.SceneIndex,
+                    ImagePath = v.ImagePath,
+                    StartTime = Math.Max(0, v.StartTime - chunkStart),
+                    Duration = v.Duration,
+                    EffectType = v.EffectType,
+                    ZoomIntensity = v.ZoomIntensity,
+                    TransitionType = v.TransitionType,
+                    TransitionDuration = v.TransitionDuration,
+                    VisualRole = v.VisualRole,
+                    SegmentIndex = v.SegmentIndex,
+                    SegmentCount = v.SegmentCount
+                }).ToList(),
+                AudioTrack = source.AudioTrack
+                    .Where(a => a.Type == "voice" && a.StartTime >= chunkStart - 0.01 && a.StartTime < chunkEnd + 0.01)
+                    .OrderBy(a => a.StartTime)
+                    .Select(a => new AudioEvent
+                    {
+                        Type = a.Type,
+                        FilePath = a.FilePath,
+                        StartTime = Math.Max(0, a.StartTime - chunkStart),
+                        Volume = a.Volume,
+                        Loop = a.Loop
+                    })
+                    .ToList(),
+                CaptionTrack = source.CaptionTrack
+                    .Where(c => c.End > chunkStart && c.Start < chunkEnd)
+                    .Select(c => new CaptionEvent
+                    {
+                        Text = c.Text,
+                        Start = Math.Max(0, c.Start - chunkStart),
+                        End = Math.Max(0.05, c.End - chunkStart)
+                    })
+                    .ToList()
+            };
+        }
+
+        private async Task ConcatenateChunksAsync(
+            List<string> chunkFiles,
+            string outputPath,
+            string chunkDir,
+            CancellationToken ct,
+            Func<string, Task>? logAsync)
+        {
+            var listPath = Path.Combine(chunkDir, "chunks.txt");
+            var sb = new StringBuilder();
+
+            foreach (var file in chunkFiles)
+            {
+                sb.AppendLine($"file '{ToConcatPath(file)}'");
+            }
+
+            await File.WriteAllTextAsync(listPath, sb.ToString(), new UTF8Encoding(false), ct);
+
+            var args = $"-f concat -safe 0 -i \"{listPath}\" -c copy -y \"{outputPath}\"";
+
+            try
+            {
+                await SafeLogAsync(logAsync, $"Render parçaları hızlı modda birleştiriliyor. Parça sayısı: {chunkFiles.Count}.");
+                await RunFFmpegProcessAsync(args, ct);
+                await SafeLogAsync(logAsync, PipelineLiveLog.Success("Render parçaları hızlı modda birleştirildi."));
+            }
+            catch (Exception ex)
+            {
+                await SafeLogAsync(logAsync, PipelineLiveLog.Warning($"Hızlı parça birleştirme başarısız oldu. CPU ile yeniden kodlayarak birleştirilecek. Hata: {PipelineLiveLog.Shorten(ex.Message, 240)}"));
+                var fallbackArgs = $"-f concat -safe 0 -i \"{listPath}\" -c:v libx264 -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k -y \"{outputPath}\"";
+                await RunFFmpegProcessAsync(fallbackArgs, ct);
+                await SafeLogAsync(logAsync, PipelineLiveLog.Success("Render parçaları CPU encode ile birleştirildi."));
+            }
+        }
+
+        private async Task RunFFmpegWithFallbackAsync(
+            SceneLayoutStagePayload layout,
+            string subPath,
+            string audioListPath,
+            string? musicPath,
+            string outputPath,
+            string fontsDir,
+            CancellationToken ct,
+            Func<string, Task>? logAsync)
+        {
+            var args = BuildFFmpegCommand(layout, subPath, audioListPath, musicPath, outputPath, fontsDir, preferHardwareEncoder: true);
+
+            try
+            {
+                await SafeLogAsync(logAsync, "FFmpeg GPU encode deneniyor. Encoder: h264_nvenc.");
+                await RunFFmpegProcessAsync(args, ct);
+                await SafeLogAsync(logAsync, PipelineLiveLog.Success("FFmpeg GPU encode başarıyla tamamlandı. Encoder: h264_nvenc."));
+            }
+            catch (Exception ex) when (IsHardwareEncoderFailure(ex))
+            {
+                await SafeLogAsync(logAsync, PipelineLiveLog.Warning($"GPU encode kullanılamadı. CPU fallback'e geçiliyor. Encoder: libx264. Hata: {PipelineLiveLog.Shorten(ex.Message, 260)}"));
+                var cpuArgs = BuildFFmpegCommand(layout, subPath, audioListPath, musicPath, outputPath, fontsDir, preferHardwareEncoder: false);
+                await RunFFmpegProcessAsync(cpuArgs, ct);
+                await SafeLogAsync(logAsync, PipelineLiveLog.Success("FFmpeg CPU encode başarıyla tamamlandı. Encoder: libx264."));
+            }
+        }
+
+        private static void NormalizeLayoutMediaPaths(SceneLayoutStagePayload layout, string workDir)
+        {
+            foreach (var visual in layout.VisualTrack)
+            {
+                visual.ImagePath = ResolveRunMediaPath(visual.ImagePath, workDir, "images");
+            }
+
+            foreach (var audio in layout.AudioTrack)
+            {
+                audio.FilePath = ResolveRunMediaPath(audio.FilePath, workDir, "audio");
+            }
+        }
+
+        private static string ResolveRunMediaPath(string sourcePath, string workDir, string preferredSubFolder)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath))
+                throw new FileNotFoundException($"Render media path is empty for '{preferredSubFolder}'.");
+
+            if (File.Exists(sourcePath)) return sourcePath;
+
+            var runRoot = Directory.GetParent(workDir)?.FullName;
+            var fileName = GetPortableFileName(sourcePath);
+            var tried = new List<string> { sourcePath };
+
+            if (!string.IsNullOrWhiteSpace(runRoot) && !string.IsNullOrWhiteSpace(fileName))
+            {
+                var preferredCandidate = Path.Combine(runRoot, preferredSubFolder, fileName);
+                tried.Add(preferredCandidate);
+                if (File.Exists(preferredCandidate)) return preferredCandidate;
+
+                var fallbackCandidate = Directory
+                    .EnumerateFiles(runRoot, fileName, SearchOption.AllDirectories)
+                    .FirstOrDefault();
+
+                if (!string.IsNullOrWhiteSpace(fallbackCandidate))
+                    return fallbackCandidate;
+            }
+
+            throw new FileNotFoundException(
+                $"Render media file not found. Original='{sourcePath}'. Tried='{string.Join(" | ", tried)}'.");
+        }
+
+        private static string GetPortableFileName(string path)
+        {
+            var normalized = path
+                .Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
+
+            return Path.GetFileName(normalized);
         }
 
         // =================================================================
@@ -88,6 +368,7 @@ namespace Application.Services
         private string GetSmartFontPath(string fontName)
         {
             string fontsFolder = Path.Combine(_assetsPath, "fonts");
+            if (!Directory.Exists(fontsFolder)) return "Arial";
 
             // 1. Basit Arama: İsim birebir tutuyor mu?
             string directPath = Path.Combine(fontsFolder, fontName);
@@ -215,7 +496,7 @@ namespace Application.Services
         // =================================================================
         // 🛠️ FFmpeg KOMUT İNŞASI
         // =================================================================
-        private string BuildFFmpegCommand(SceneLayoutStagePayload layout, string subPath, string audioListPath, string? musicPath, string outputPath, string workDir)
+        private string BuildFFmpegCommand(SceneLayoutStagePayload layout, string subPath, string audioListPath, string? musicPath, string outputPath, string fontsDir, bool preferHardwareEncoder)
         {
             var sb = new StringBuilder();
             var filter = new StringBuilder();
@@ -246,16 +527,15 @@ namespace Application.Services
             {
                 var v = layout.VisualTrack[i];
                 int idx = imgStartIndex + i;
-                int frames = (int)(v.Duration * layout.Fps);
+                int frames = Math.Max(1, (int)Math.Ceiling(v.Duration * layout.Fps));
 
                 double maxZoom = layout.Style.VisualEffectsSettings.ZoomIntensity;
                 if (maxZoom < 1.0) maxZoom = 1.1;
 
-                string zoomExpr = v.EffectType == "zoom_in"
-                    ? $"min(zoom+0.0015,{FloatStr(maxZoom)})"
-                    : $"if(eq(on,1),{FloatStr(maxZoom)},max(1.0,zoom-0.0015))";
+                var effectType = (v.EffectType ?? "zoom_in").Trim().ToLowerInvariant();
+                var motion = BuildMotionExpressions(effectType, maxZoom, frames);
 
-                filter.Append($"[{idx}:v]scale=-2:4*ih,zoompan=z='{zoomExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={layout.Width}x{layout.Height}:fps={layout.Fps},setsar=1");
+                filter.Append($"[{idx}:v]scale=-2:4*ih,zoompan=z='{motion.Zoom}':x='{motion.X}':y='{motion.Y}':d={frames}:s={layout.Width}x{layout.Height}:fps={layout.Fps},setsar=1");
 
                 var cf = layout.Style.VisualEffectsSettings.ColorFilter;
                 if (!string.IsNullOrEmpty(cf))
@@ -284,8 +564,14 @@ namespace Application.Services
                 };
 
                 // Watermark fontu için basit bir fallback (Arial)
-                string fontPath = Path.Combine(_assetsPath, "fonts", "Arial-Bold.ttf");
-                if (!File.Exists(fontPath)) fontPath = Directory.GetFiles(Path.Combine(_assetsPath, "fonts"), "*.ttf").FirstOrDefault() ?? "Arial";
+                var fontFolder = Path.Combine(_assetsPath, "fonts");
+                string fontPath = Path.Combine(fontFolder, "Arial-Bold.ttf");
+                if (!File.Exists(fontPath))
+                {
+                    fontPath = Directory.Exists(fontFolder)
+                        ? Directory.GetFiles(fontFolder, "*.ttf").FirstOrDefault() ?? "Arial"
+                        : "Arial";
+                }
 
                 string colorAss = HexToAssColor(branding.WatermarkColor, branding.Opacity);
                 filter.Append($"[v_joined]drawtext=fontfile='{Escape(fontPath)}':text='{branding.WatermarkText}':fontcolor={colorAss}:fontsize=24:{overlayPos}[v_branded];");
@@ -297,8 +583,8 @@ namespace Application.Services
             if (capSettings.EnableCaptions)
             {
                 string assFile = Escape(subPath);
-                string fontsDir = Escape(workDir); // 🔥 fontsdir = workDir
-                filter.Append($"{lastVideoLabel}subtitles='{assFile}':fontsdir='{fontsDir}'[v_final];");
+                string escapedFontsDir = Escape(fontsDir);
+                filter.Append($"{lastVideoLabel}subtitles='{assFile}':fontsdir='{escapedFontsDir}'[v_final];");
             }
             else
             {
@@ -345,8 +631,22 @@ namespace Application.Services
             // ÇIKTI
             sb.Append(filter.ToString());
             sb.Append(" -map \"[v_final]\" -map \"[a_final]\" ");
-            string gpuPreset = layout.Style.EncoderPreset switch { "fast" => "p3", "slow" => "p6", _ => "p4" };
-            sb.Append($"-c:v h264_nvenc -preset {gpuPreset} ");
+            if (preferHardwareEncoder)
+            {
+                string gpuPreset = layout.Style.EncoderPreset switch { "fast" => "p3", "slow" => "p6", _ => "p4" };
+                sb.Append($"-c:v h264_nvenc -preset {gpuPreset} ");
+            }
+            else
+            {
+                string cpuPreset = layout.Style.EncoderPreset switch
+                {
+                    "ultrafast" => "ultrafast",
+                    "fast" => "fast",
+                    "slow" => "slow",
+                    _ => "medium"
+                };
+                sb.Append($"-c:v libx264 -preset {cpuPreset} ");
+            }
             sb.Append($"-b:v {layout.Style.BitrateKbps}k -maxrate {layout.Style.BitrateKbps + 1000}k -bufsize 10M ");
             sb.Append("-pix_fmt yuv420p ");
             sb.Append("-c:a aac -b:a 192k ");
@@ -356,19 +656,62 @@ namespace Application.Services
             return sb.ToString();
         }
 
+        private static (string Zoom, string X, string Y) BuildMotionExpressions(string effectType, double maxZoom, int frames)
+        {
+            string FloatStr(double val) => val.ToString("0.00", CultureInfo.InvariantCulture);
+
+            var progressDenominator = Math.Max(1, frames - 1);
+            var centerX = "iw/2-(iw/zoom/2)";
+            var centerY = "ih/2-(ih/zoom/2)";
+            var panZoom = Math.Max(maxZoom, 1.08);
+            var panZoomExpr = FloatStr(panZoom);
+
+            return effectType switch
+            {
+                "zoom_out" => (
+                    $"if(eq(on,1),{FloatStr(maxZoom)},max(1.0,zoom-0.0015))",
+                    centerX,
+                    centerY),
+                "pan_left" => (
+                    panZoomExpr,
+                    $"(iw-iw/zoom)*on/{progressDenominator}",
+                    centerY),
+                "pan_right" => (
+                    panZoomExpr,
+                    $"(iw-iw/zoom)*(1-on/{progressDenominator})",
+                    centerY),
+                "pan_up" => (
+                    panZoomExpr,
+                    centerX,
+                    $"(ih-ih/zoom)*on/{progressDenominator}"),
+                "pan_down" => (
+                    panZoomExpr,
+                    centerX,
+                    $"(ih-ih/zoom)*(1-on/{progressDenominator})"),
+                _ => (
+                    $"min(zoom+0.0015,{FloatStr(maxZoom)})",
+                    centerX,
+                    centerY)
+            };
+        }
+
 
         // =================================================================
         // 🔥 ASS GENERATOR (WORD MERGER + BLACK-ON-BLACK FIX)
         // =================================================================
-        private async Task GenerateDynamicAssFileAsync(List<CaptionEvent> captions, string path, RenderCaptionSettings settings, string cultureCode, FontInfo fontInfo)
+        private async Task GenerateDynamicAssFileAsync(List<CaptionEvent> captions, string path, RenderCaptionSettings settings, string cultureCode, FontInfo fontInfo, int videoWidth, int videoHeight)
         {
             var sb = new StringBuilder();
             CultureInfo culture;
             try { culture = new CultureInfo(cultureCode); } catch { culture = new CultureInfo("en-US"); }
 
             // 1. FONT VE OKUNABİLİRLİK AYARLARI
-            int finalFontSize = settings.FontSize;
-            if (finalFontSize < 75) finalFontSize = 75;
+            videoWidth = videoWidth > 0 ? videoWidth : 1080;
+            videoHeight = videoHeight > 0 ? videoHeight : 1920;
+
+            int minReadableFontSize = Math.Max(18, (int)Math.Round(Math.Min(videoWidth, videoHeight) * 0.035));
+            int finalFontSize = settings.FontSize > 0 ? settings.FontSize : minReadableFontSize;
+            if (finalFontSize < minReadableFontSize) finalFontSize = minReadableFontSize;
 
             // ASS Formatında Bold/Italic (-1 = True)
             int bold = fontInfo.IsBold ? -1 : 0;
@@ -378,8 +721,8 @@ namespace Application.Services
             sb.AppendLine("[Script Info]");
             sb.AppendLine("ScriptType: v4.00+");
             sb.AppendLine("WrapStyle: 2");
-            sb.AppendLine("PlayResX: 1080");
-            sb.AppendLine("PlayResY: 1920");
+            sb.AppendLine($"PlayResX: {videoWidth}");
+            sb.AppendLine($"PlayResY: {videoHeight}");
             sb.AppendLine();
 
             sb.AppendLine("[V4+ Styles]");
@@ -415,7 +758,8 @@ namespace Application.Services
             };
 
             int marginV = settings.MarginBottom;
-            if (align == 2 && marginV < 200) marginV = 200;
+            int minBottomMargin = Math.Max(40, (int)Math.Round(videoHeight * 0.10));
+            if (align == 2 && marginV < minBottomMargin) marginV = minBottomMargin;
 
             // Style: FamilyName dinamik
             sb.AppendLine($"Style: Default,{familyName},{finalFontSize},{primary},&H000000FF,{backColor},&H00000000,{bold},{italic},0,0,100,100,{spacing},0,{borderStyle},{outlineSize},0,{align},20,20,{marginV},1");
@@ -494,10 +838,14 @@ namespace Application.Services
             var sb = new StringBuilder();
             foreach (var audio in audios.Where(a => a.Type == "voice").OrderBy(a => a.StartTime))
             {
-                sb.AppendLine($"file '{audio.FilePath.Replace("\\", "/")}'");
+                var filePath = ToConcatPath(audio.FilePath);
+                sb.AppendLine($"file '{filePath}'");
             }
             await File.WriteAllTextAsync(path, sb.ToString(), new UTF8Encoding(false));
         }
+
+        private static string ToConcatPath(string path)
+            => path.Replace("\\", "/").Replace("'", "\\'");
 
         private async Task RunFFmpegProcessAsync(string args, CancellationToken ct)
         {
@@ -524,6 +872,29 @@ namespace Application.Services
                 var errPart = logStr.Length > 1000 ? logStr.Substring(logStr.Length - 1000) : logStr;
                 throw new Exception($"FFmpeg Hatası: {errPart}");
             }
+        }
+
+        private static async Task SafeLogAsync(Func<string, Task>? logAsync, string message)
+        {
+            if (logAsync == null) return;
+
+            try
+            {
+                await logAsync(message);
+            }
+            catch
+            {
+                // Render akışı log gönderimi yüzünden bozulmasın.
+            }
+        }
+
+        private static bool IsHardwareEncoderFailure(Exception ex)
+        {
+            var message = ex.ToString();
+            return message.Contains("h264_nvenc", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("Cannot load", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("No capable devices", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("Error while opening encoder", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

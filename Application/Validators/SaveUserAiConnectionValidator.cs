@@ -34,14 +34,14 @@ namespace Application.Validators
             When(x => x.Provider == AiProviderType.GoogleVertex.ToString(), () =>
             {
                 RuleFor(x => x.ApiKey)
-                    .Must(BeValidJson)
-                    .WithMessage("Google Vertex için 'Service Account JSON' içeriğinin tamamını yapıştırmalısınız.");
+                    .Must(key => IsApplicationDefaultCredentialsMarker(key) || BeValidJson(key))
+                    .WithMessage("Google Vertex için Service Account JSON yapıştırın veya Application Default Credentials için 'ADC' yazın.");
 
-                // Google için Project ID genelde JSON içinden çıkar ama ExtraId doluysa kontrol et
+                // Google için Project ID genelde JSON içinden çıkar. ADC'de Project ID gerekir.
                 RuleFor(x => x.ExtraId)
                     .NotEmpty()
-                    .When(x => !IsJsonContainsProjectId(x.ApiKey))
-                    .WithMessage("JSON içinde project_id bulunamadı, lütfen ExtraId alanına Project ID giriniz.");
+                    .When(x => IsApplicationDefaultCredentialsMarker(x.ApiKey) || !IsJsonContainsProjectId(x.ApiKey))
+                    .WithMessage("ADC kullanıyorsanız veya JSON içinde project_id yoksa ExtraId alanına Google Project ID giriniz.");
             });
         }
 
@@ -56,7 +56,21 @@ namespace Application.Validators
 
         private bool IsJsonContainsProjectId(string json)
         {
+            if (string.IsNullOrWhiteSpace(json)) return false;
             return json.Contains("\"project_id\"");
+        }
+
+        private static bool IsApplicationDefaultCredentialsMarker(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+
+            var normalized = value.Trim();
+            return normalized.Equals("ADC", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("__ADC__", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("ApplicationDefaultCredentials", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("Application Default Credentials", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("Application Default", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("ApplicationDefault", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

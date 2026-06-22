@@ -7,6 +7,8 @@
         public string Name { get; set; } = default!;
         public string? Description { get; set; }
         public int ConceptId { get; set; }
+        public string ProductionProfile { get; set; } = "Generic";
+        public string? WorkflowLayoutJson { get; set; }
 
         // Şablonun Adımları
         public List<StageConfigDto> Stages { get; set; } = new();

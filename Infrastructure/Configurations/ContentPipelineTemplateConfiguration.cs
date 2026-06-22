@@ -19,6 +19,8 @@ namespace Infrastructure.Configurations
 
             b.Property(x => x.Name).HasMaxLength(150).IsRequired();
             b.Property(x => x.Description).HasMaxLength(500);
+            b.Property(x => x.ProductionProfile).HasMaxLength(40).HasDefaultValue("Generic").IsRequired();
+            b.Property(x => x.WorkflowLayoutJson).HasColumnType("nvarchar(max)");
 
             // İLİŞKİLER
 

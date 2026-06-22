@@ -28,9 +28,9 @@ namespace Application.Validators
             RuleFor(x => x.SubCategory).MaximumLength(128);
             RuleFor(x => x.Series).MaximumLength(128);
 
-            RuleFor(x => x.Tone).MaximumLength(64);
-            RuleFor(x => x.RenderStyle).MaximumLength(64);
-            RuleFor(x => x.VisualPromptHint).MaximumLength(256);
+            RuleFor(x => x.Tone).MaximumLength(512);
+            RuleFor(x => x.RenderStyle).MaximumLength(512);
+            RuleFor(x => x.VisualPromptHint).MaximumLength(4000);
 
             // 4. JSON Validasyonu (TagsJson için)
             // Eğer doluysa, geçerli bir JSON array olup olmadığına bakıyoruz

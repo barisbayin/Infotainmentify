@@ -13,6 +13,13 @@
         // Renk Düzenleme (LUT)
         public string? ColorFilter { get; set; } // "cinematic_warm", "bw_noir"
 
+        // Long-form icin sahne ici gorsel ritim. Gercek ek B-roll gorselleri gelene kadar
+        // uzun sahneleri farkli pan/zoom hareketlerine bolerek tek gorsel monotonlugunu azaltir.
+        public bool EnableAutoBroll { get; set; } = false;
+        public int MinSceneDurationForBrollSec { get; set; } = 18;
+        public int BrollSegmentDurationSec { get; set; } = 10;
+        public int MaxBrollCutsPerScene { get; set; } = 5;
+
         // Video Hızı (Speed Ramp) - İleride eklenebilir
         // public double SpeedMultiplier { get; set; } = 1.0; 
     }

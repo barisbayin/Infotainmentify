@@ -48,7 +48,7 @@ namespace Application.Executors
             var preset = (TopicPreset)presetObj!;
 
             // 🔥 FIX 2: Using logAsync instead of exec.AddLog
-            await logAsync($"💡 Starting Topic Generation via {preset.ModelName}...");
+            await logAsync($"Konu üretimi hazırlanıyor. Model: {preset.ModelName}, dil: {preset.Language}.");
 
             // 1. Prepare AI Client
             var aiClient = await _aiFactory.ResolveTextClientAsync(run.AppUserId, preset.UserAiConnectionId, ct);
@@ -66,7 +66,7 @@ namespace Application.Executors
             }
 
             // 3. Call AI
-            await logAsync("🤖 Sending request to AI...");
+            await logAsync("AI'ya konu üretim isteği gönderiliyor.");
 
             var responseText = await aiClient.GenerateTextAsync(
                 prompt: $"{systemInstruction}\n\nUser Request: {userPrompt}",
@@ -75,7 +75,7 @@ namespace Application.Executors
                 ct: ct
             );
 
-            await logAsync("✨ AI response received. Processing...");
+            await logAsync("AI yanıtı alındı. Konu JSON çıktısı işleniyor.");
 
             // 4. Parse JSON (Smart Try)
             string title = "Untitled Topic";
@@ -98,7 +98,7 @@ namespace Application.Executors
             }
             catch
             {
-                await logAsync("⚠️ Warning: AI response was not valid JSON. Using raw text as premise.");
+                await logAsync(PipelineLiveLog.Warning("AI yanıtı geçerli JSON değil. Ham metin konu açıklaması olarak kullanılacak."));
                 // Fallback: Use full text as premise, truncate for title
                 title = responseText.Length > 50 ? responseText.Substring(0, 47) + "..." : responseText;
             }
@@ -122,7 +122,7 @@ namespace Application.Executors
             await _topicRepo.AddAsync(topic, ct);
             await _uow.SaveChangesAsync(ct);
 
-            await logAsync($"✅ Topic saved to DB. ID: {topic.Id} - '{title}'");
+            await logAsync(PipelineLiveLog.Success($"Konu veritabanına kaydedildi. ID: {topic.Id}, başlık: '{title}'."));
 
             // 6. Return Payload for Next Stage
             return new TopicStagePayload

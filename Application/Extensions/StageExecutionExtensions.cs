@@ -1,4 +1,5 @@
-﻿using Core.Entity.Pipeline;
+using Application.Pipeline;
+using Core.Entity.Pipeline;
 using Core.Enums;
 using System.Text.Json;
 
@@ -19,7 +20,7 @@ namespace Application.Extensions
                 logs = JsonSerializer.Deserialize<List<string>>(exec.LogsJson)
                        ?? new List<string>();
 
-            logs.Add($"{DateTime.Now:O} - {message}");
+            logs.Add($"{DateTime.Now:O} - {PipelineLiveLog.Info(message)}");
             exec.LogsJson = JsonSerializer.Serialize(logs);
         }
 
@@ -29,7 +30,7 @@ namespace Application.Extensions
         public static void SetStatus(this StageExecution exec, StageStatus status)
         {
             exec.Status = status;
-            exec.AddLog($"Status changed to {status}");
+            exec.AddLog($"Aşama durumu değişti: {status}.");
         }
 
         // ------------------------------
@@ -39,7 +40,7 @@ namespace Application.Extensions
         {
             exec.StartedAt = DateTime.Now;
             exec.Status = StageStatus.Running;
-            exec.AddLog("Stage started");
+            exec.AddLog("Aşama başlatıldı.");
         }
 
         // ------------------------------
@@ -62,7 +63,7 @@ namespace Application.Extensions
             // Output kaydı
             exec.OutputJson = JsonSerializer.Serialize(output);
 
-            exec.AddLog("Stage completed successfully");
+            exec.AddLog("Aşama başarıyla tamamlandı.");
         }
 
         // ------------------------------
@@ -79,7 +80,7 @@ namespace Application.Extensions
                 exec.DurationMs = (int)(exec.FinishedAt.Value - exec.StartedAt.Value).TotalMilliseconds;
             }
 
-            exec.AddLog($"Stage failed: {error}");
+            exec.AddLog(PipelineLiveLog.Error($"Aşama başarısız oldu: {error}"));
         }
 
         // ------------------------------
@@ -89,7 +90,7 @@ namespace Application.Extensions
         {
             exec.Status = StageStatus.Retrying;
             exec.RetryCount++;
-            exec.AddLog($"Retrying stage... RetryCount = {exec.RetryCount}");
+            exec.AddLog(PipelineLiveLog.Warning($"Aşama yeniden deneniyor. Deneme sayısı: {exec.RetryCount}."));
         }
 
         // ------------------------------
@@ -107,7 +108,7 @@ namespace Application.Extensions
                 exec.DurationMs = (int)(exec.FinishedAt.Value - exec.StartedAt.Value).TotalMilliseconds;
             }
 
-            exec.AddLog($"Stage permanently failed: {error}");
+            exec.AddLog(PipelineLiveLog.Error($"Aşama kalıcı olarak başarısız oldu: {error}"));
         }
     }
 }

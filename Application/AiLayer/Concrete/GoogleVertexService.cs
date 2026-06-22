@@ -23,6 +23,7 @@ namespace Application.AiLayer.Concrete
         private string _serviceAccountJson = string.Empty; // API Key yerine JSON tutuyoruz
         private string _googleProjectId = string.Empty;
         private string _geminiModel = "gemini-2.5-flash"; // Varsayılan model
+        private GoogleCredential? _vertexCredential;
 
         // gRPC Clients
         private TextToSpeechClient? _ttsClient;
@@ -42,22 +43,37 @@ namespace Application.AiLayer.Concrete
         public void Initialize(string apiKey, string? extraId = null)
         {
             // Google için:
-            // apiKey => Service Account JSON içeriğinin tamamı (EncryptedApiKey'den gelir)
+            // apiKey => Service Account JSON içeriği veya "ADC"
             // extraId => Google Project ID (UserAiConnection.ExtraId'den gelir)
+            GoogleCredential credential;
 
-            if (string.IsNullOrWhiteSpace(apiKey))
-                throw new ArgumentNullException(nameof(apiKey), "Google Service Account JSON boş olamaz.");
+            if (IsApplicationDefaultCredentialsMarker(apiKey))
+            {
+                credential = GoogleCredential.GetApplicationDefault();
+                _serviceAccountJson = string.Empty;
+                _googleProjectId = extraId
+                    ?? Environment.GetEnvironmentVariable("GOOGLE_CLOUD_PROJECT")
+                    ?? Environment.GetEnvironmentVariable("GCLOUD_PROJECT")
+                    ?? Environment.GetEnvironmentVariable("GOOGLE_PROJECT_ID")
+                    ?? string.Empty;
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(apiKey))
+                    throw new ArgumentNullException(nameof(apiKey), "Google Service Account JSON boş olamaz. ADC kullanacaksanız API Key alanına 'ADC' yazın.");
 
-            _serviceAccountJson = apiKey;
-            _googleProjectId = extraId ?? ExtractProjectIdFromJson(_serviceAccountJson);
+                _serviceAccountJson = apiKey;
+                credential = GoogleCredential.FromJson(_serviceAccountJson);
+                _googleProjectId = extraId ?? ExtractProjectIdFromJson(_serviceAccountJson);
+            }
 
             if (string.IsNullOrWhiteSpace(_googleProjectId))
-                throw new InvalidOperationException("Google Project ID bulunamadı. Lütfen bağlantı ayarlarında 'ExtraId' alanını doldurun veya JSON dosyasını kontrol edin.");
+                throw new InvalidOperationException("Google Project ID bulunamadı. ADC kullanıyorsanız bağlantı ayarlarında Project ID girin veya GOOGLE_CLOUD_PROJECT environment variable set edin.");
 
             // -------------------------------------------------------------
             // gRPC Credentials Oluşturma
             // -------------------------------------------------------------
-            var credential = GoogleCredential.FromJson(_serviceAccountJson);
+            _vertexCredential = credential.CreateScoped("https://www.googleapis.com/auth/cloud-platform");
 
             // TTS Client Build
             _ttsClient = new TextToSpeechClientBuilder
@@ -152,15 +168,12 @@ namespace Application.AiLayer.Concrete
         {
             var accessToken = await GetAccessTokenAsync(ct);
 
-            // Varsayılan olarak Imagen 3 veya Imagen 2 modelini kullan
-            var selectedModel = model ?? "imagegeneration@006";
-
-            // DİKKAT: Eğer kullanıcı yanlışlıkla "gemini" modelini seçtiyse, 
-            // burada manuel olarak düzeltelim ki hata almasın.
-            if (selectedModel.ToLower().Contains("gemini"))
+            // Yeni Gemini image modelleri Imagen :predict endpoint'i ile değil,
+            // generateContent + responseModalities(TEXT, IMAGE) ile çalışır.
+            var selectedModel = model ?? "gemini-2.5-flash-image";
+            if (IsGeminiImageModel(selectedModel))
             {
-                // Fallback: Gemini resim çizemez, Imagen'e yönlendir.
-                selectedModel = "imagegeneration@006";
+                return await GenerateGeminiImageAsync(prompt, negativePrompt, size, style, selectedModel, accessToken, ct);
             }
 
             // Imagen Endpoint'i (:predict ile biter)
@@ -168,14 +181,6 @@ namespace Application.AiLayer.Concrete
 
             // Prompt Hazırlığı
             var finalPrompt = string.IsNullOrWhiteSpace(style) ? prompt : $"{prompt}, style: {style}";
-
-            var safetySettings = new[]
-            {
-                new { category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_ONLY_HIGH" },
-                new { category = "HARM_CATEGORY_HATE_SPEECH", threshold = "BLOCK_ONLY_HIGH" },
-                new { category = "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold = "BLOCK_ONLY_HIGH" },
-                new { category = "HARM_CATEGORY_DANGEROUS_CONTENT", threshold = "BLOCK_ONLY_HIGH" }
-            };
 
             // Vertex AI Imagen Payload Yapısı
             var payload = new
@@ -191,8 +196,7 @@ namespace Application.AiLayer.Concrete
                     aspectRatio = size == "1080x1920" ? "9:16" : (size == "1920x1080" ? "16:9" : "1:1"),
                     // negativePrompt parametresi her modelde olmayabilir ama deneriz
                     negativePrompt = negativePrompt
-                },
-                safetySettings = safetySettings
+                }
             };
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url);
@@ -257,6 +261,95 @@ namespace Application.AiLayer.Concrete
             {
                 // Hata detayını ve gelen JSON'ı logluyoruz ki ne olduğunu görelim
                 throw new Exception($"Google Imagen response parse hatası: {ex.Message} \nRaw Response: {json}");
+            }
+        }
+
+        private async Task<byte[]> GenerateGeminiImageAsync(
+            string prompt,
+            string? negativePrompt,
+            string size,
+            string? style,
+            string selectedModel,
+            string accessToken,
+            CancellationToken ct)
+        {
+            var url = $"https://us-central1-aiplatform.googleapis.com/v1/projects/{_googleProjectId}/locations/us-central1/publishers/google/models/{selectedModel}:generateContent";
+            var finalPrompt = BuildImagePrompt(prompt, negativePrompt, style);
+            var aspectRatio = MapAspectRatio(size);
+
+            var payload = new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        parts = new[]
+                        {
+                            new { text = finalPrompt }
+                        }
+                    }
+                },
+                generationConfig = new
+                {
+                    responseModalities = new[] { "TEXT", "IMAGE" },
+                    candidateCount = 1,
+                    imageConfig = new
+                    {
+                        aspectRatio
+                    }
+                }
+            };
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            req.Content = JsonContent.Create(payload);
+
+            var res = await _http.SendAsync(req, ct);
+            var json = await res.Content.ReadAsStringAsync(ct);
+
+            if (!res.IsSuccessStatusCode)
+                throw new Exception($"Google Gemini Image Error ({res.StatusCode}): {json}");
+
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                var textParts = new List<string>();
+
+                if (root.TryGetProperty("candidates", out var candidates) &&
+                    candidates.ValueKind == JsonValueKind.Array &&
+                    candidates.GetArrayLength() > 0)
+                {
+                    foreach (var candidate in candidates.EnumerateArray())
+                    {
+                        if (candidate.TryGetProperty("content", out var content) &&
+                            content.TryGetProperty("parts", out var parts) &&
+                            parts.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var part in parts.EnumerateArray())
+                            {
+                                if (part.TryGetProperty("text", out var textElement))
+                                {
+                                    var text = textElement.GetString();
+                                    if (!string.IsNullOrWhiteSpace(text))
+                                        textParts.Add(text);
+                                }
+
+                                var base64 = TryGetInlineImageBase64(part);
+                                if (!string.IsNullOrWhiteSpace(base64))
+                                    return Convert.FromBase64String(base64);
+                            }
+                        }
+                    }
+                }
+
+                var textOutput = textParts.Count > 0 ? string.Join(" ", textParts) : "Image part bulunamadı.";
+                throw new Exception($"Google Gemini image response içinde görsel yok. Text output: {textOutput}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Google Gemini Image response parse hatası: {ex.Message} \nRaw Response: {json}");
             }
         }
 
@@ -396,10 +489,69 @@ namespace Application.AiLayer.Concrete
         // Google Auth Token alır (Service Account JSON'dan)
         private async Task<string> GetAccessTokenAsync(CancellationToken ct)
         {
-            var cred = GoogleCredential.FromJson(_serviceAccountJson)
-                .CreateScoped("https://www.googleapis.com/auth/cloud-platform");
+            var cred = _vertexCredential ?? throw new InvalidOperationException("Google Vertex credential başlatılmadı.");
             var token = await cred.UnderlyingCredential.GetAccessTokenForRequestAsync(null, ct);
             return token;
+        }
+
+        private static bool IsApplicationDefaultCredentialsMarker(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+
+            var normalized = value.Trim();
+            return normalized.Equals("ADC", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("__ADC__", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("ApplicationDefaultCredentials", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("Application Default Credentials", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("ApplicationDefault", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("Application Default", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsGeminiImageModel(string model)
+            => model.Contains("gemini", StringComparison.OrdinalIgnoreCase)
+               && model.Contains("image", StringComparison.OrdinalIgnoreCase);
+
+        private static string BuildImagePrompt(string prompt, string? negativePrompt, string? style)
+        {
+            var sb = new StringBuilder(prompt.Trim());
+
+            if (!string.IsNullOrWhiteSpace(style))
+                sb.Append($"\n\nVisual style: {style.Trim()}");
+
+            if (!string.IsNullOrWhiteSpace(negativePrompt))
+                sb.Append($"\n\nAvoid: {negativePrompt.Trim()}");
+
+            return sb.ToString();
+        }
+
+        private static string MapAspectRatio(string size)
+        {
+            var normalized = size.Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "1080x1920" or "9:16" => "9:16",
+                "1920x1080" or "16:9" => "16:9",
+                "1024x1024" or "1:1" => "1:1",
+                "3:2" or "2:3" or "3:4" or "4:3" or "4:5" or "5:4" or "21:9" => normalized,
+                _ => "1:1"
+            };
+        }
+
+        private static string? TryGetInlineImageBase64(JsonElement part)
+        {
+            if (part.TryGetProperty("inlineData", out var inlineData) &&
+                inlineData.TryGetProperty("data", out var data))
+            {
+                return data.GetString();
+            }
+
+            if (part.TryGetProperty("inline_data", out var inlineDataSnake) &&
+                inlineDataSnake.TryGetProperty("data", out var dataSnake))
+            {
+                return dataSnake.GetString();
+            }
+
+            return null;
         }
 
         private string ExtractProjectIdFromJson(string json)

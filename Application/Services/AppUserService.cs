@@ -145,13 +145,9 @@ namespace Application.Services
             var user = await _repo.GetByIdAsync(targetUserId, asNoTracking: false, ct);
             if (user == null) throw new InvalidOperationException("Kullanıcı bulunamadı.");
 
-            // isActive parametresini AppUser entity'sine eklemen gerekebilir (örn: IsActive propertysi)
-            // Eğer BaseEntity'de 'Removed' varsa onu kullanabiliriz (Soft Delete)
-            // Veya IsActive diye ayrı bir alan açabiliriz.
-
-            // user.IsActive = isActive; 
-            // _repo.Update(user);
-            // await _uow.SaveChangesAsync(ct);
+            user.IsActive = isActive;
+            _repo.Update(user);
+            await _uow.SaveChangesAsync(ct);
         }
     }
 }

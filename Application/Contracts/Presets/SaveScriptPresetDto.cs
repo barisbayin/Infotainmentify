@@ -23,7 +23,7 @@ namespace Application.Contracts.Presets
         [MaxLength(50)]
         public string Tone { get; set; } = "Engaging";
 
-        [Range(15, 300)]
+        [Range(15, 3600)]
         public int TargetDurationSec { get; set; } = 60;
 
         [MaxLength(10)]

@@ -10,6 +10,7 @@ namespace Application.Mappers
             Id = e.Id,
             Name = e.Name,
             ConceptName = e.Concept?.Name ?? "-", // Concept Include edilmeli
+            ProductionProfile = e.ProductionProfile,
             StageCount = e.StageConfigs?.Count ?? 0,
             CreatedAt = e.CreatedAt,
             AutoPublish = e.AutoPublish
@@ -21,6 +22,8 @@ namespace Application.Mappers
             Name = e.Name,
             Description = e.Description,
             ConceptId = e.ConceptId,
+            ProductionProfile = e.ProductionProfile,
+            WorkflowLayoutJson = e.WorkflowLayoutJson,
             CreatedAt = e.CreatedAt,
             UpdatedAt = e.UpdatedAt,
             AutoPublish = e.AutoPublish,

@@ -37,7 +37,7 @@ namespace Application.Executors
             Func<string, Task> logAsync,
             CancellationToken ct)
         {
-            await logAsync("🎬 Starting Video Rendering Process...");
+            await logAsync("Final render hazırlanıyor. Kurgu planı FFmpeg'e gönderilecek.");
 
             // =================================================================
             // 1. LAYOUT'U BUL (Memory vs Database Stratejisi)
@@ -49,7 +49,7 @@ namespace Application.Executors
             // B) Eğer RAM boşsa (Retry/Re-Render senaryosu), Veritabanına bak.
             if (layout == null)
             {
-                await logAsync("⚠️ Context is empty (Retry/Re-Render detected). Fetching layout from Database history...");
+                await logAsync(PipelineLiveLog.Warning("Kurgu planı bellekte bulunamadı. Retry/Re-render senaryosu için veritabanı geçmişi kontrol ediliyor."));
 
                 // SceneLayout aşamasının kaydını bul
                 var layoutExec = run.StageExecutions
@@ -60,11 +60,11 @@ namespace Application.Executors
                     try
                     {
                         layout = JsonSerializer.Deserialize<SceneLayoutStagePayload>(layoutExec.OutputJson);
-                        await logAsync("✅ Layout successfully restored from Database.");
+                        await logAsync(PipelineLiveLog.Success("Kurgu planı veritabanı geçmişinden geri yüklendi."));
                     }
                     catch (Exception ex)
                     {
-                        await logAsync($"❌ Failed to deserialize layout from DB: {ex.Message}");
+                        await logAsync(PipelineLiveLog.Error($"Veritabanındaki kurgu planı okunamadı. Hata: {ex.Message}"));
                     }
                 }
             }
@@ -81,7 +81,7 @@ namespace Application.Executors
 
             if (presetObj is RenderPreset currentPreset)
             {
-                await logAsync($"⚙️ Applying updated render settings from Preset: '{currentPreset.Name}'");
+                await logAsync($"Render ayarları güncel preset üzerinden uygulanıyor: '{currentPreset.Name}'.");
 
                 // Layout'un stilini tamamen yenisiyle değiştir
                 layout.Style = new RenderStyleSettings
@@ -103,7 +103,7 @@ namespace Application.Executors
             }
             else
             {
-                await logAsync("ℹ️ No new preset provided. Using cached styles from layout.");
+                await logAsync("Yeni render preset gelmedi. Kurgu planındaki mevcut stil ayarları kullanılacak.");
             }
 
             // =================================================================
@@ -115,24 +115,24 @@ namespace Application.Executors
             var fileName = $"final_video_{run.Id}_{DateTime.Now.Ticks}.mp4";
             var outputPath = Path.Combine(outputDir, fileName);
 
-            await logAsync($"Target Output: {fileName}");
-            await logAsync($"Processing {layout.VisualTrack.Count} scenes. Total Duration: {layout.TotalDuration:F1}s");
+            await logAsync($"Render çıktı dosyası hazırlandı: {fileName}.");
+            await logAsync($"Render girdisi: {layout.VisualTrack.Count} görsel vuruş, toplam süre: {layout.TotalDuration:F1} sn, çözünürlük: {layout.Width}x{layout.Height}, FPS: {layout.Fps}.");
 
             // Dil Kodunu Belirle (DB'den veya Default)
             string langCode = !string.IsNullOrEmpty(run.Language) ? run.Language : "en-US";
-            await logAsync($"Language Mode: {langCode}");
+            await logAsync($"Render dil modu: {langCode}.");
 
-            await logAsync("⏳ FFmpeg engine initialized. Rendering started (this may take a while)...");
+            await logAsync("FFmpeg render işlemi başladı. Bu aşama uzun sürebilir.");
 
             try
             {
                 // 🔥 FFmpeg Servisini Çağır
-                var finalPath = await _videoService.RenderVideoAsync(layout, outputPath, langCode, ct);
+                var finalPath = await _videoService.RenderVideoAsync(layout, outputPath, langCode, ct, logAsync);
 
                 var fileInfo = new FileInfo(finalPath);
                 double sizeMb = fileInfo.Length / (1024.0 * 1024.0);
 
-                await logAsync($"✅ Render Completed Successfully! Size: {sizeMb:F2} MB");
+                await logAsync(PipelineLiveLog.Success($"Render başarıyla tamamlandı. Dosya boyutu: {sizeMb:F2} MB."));
 
                 // URL Oluşturma
                 // UserDirectoryService'e 'GetPublicUrl' metodunu eklediysen onu kullan:
@@ -147,6 +147,10 @@ namespace Application.Executors
                     SceneLayoutId = 0,
                     VideoFilePath = finalPath,
                     VideoUrl = webUrl,
+                    Width = layout.Width,
+                    Height = layout.Height,
+                    Fps = layout.Fps,
+                    AspectRatio = BuildAspectRatio(layout.Width, layout.Height),
                     FileSizeMb = sizeMb,
                     Duration = layout.TotalDuration
                 };
@@ -154,9 +158,28 @@ namespace Application.Executors
             catch (Exception ex)
             {
                 // Hata durumunda loga bas ve fırlat
-                await logAsync($"❌ FFMPEG FATAL ERROR: {ex.Message}");
+                await logAsync(PipelineLiveLog.Error($"FFmpeg render hatası: {ex.Message}"));
                 throw;
             }
+        }
+
+        private static string BuildAspectRatio(int width, int height)
+        {
+            if (width <= 0 || height <= 0) return "unknown";
+            var gcd = Gcd(width, height);
+            return $"{width / gcd}:{height / gcd}";
+        }
+
+        private static int Gcd(int a, int b)
+        {
+            while (b != 0)
+            {
+                var t = b;
+                b = a % b;
+                a = t;
+            }
+
+            return Math.Abs(a);
         }
     }
 }

@@ -44,14 +44,14 @@ namespace Application.Executors
                  CancellationToken ct)
         {
             var preset = (ScriptPreset)presetObj!;
-            await logAsync($"📝 Starting Script Generation with preset: {preset.Name}");
+            await logAsync($"Senaryo üretimi hazırlanıyor. Preset: {preset.Name}, model: {preset.ModelName}, hedef süre: {preset.TargetDurationSec} sn.");
 
             // 1. Topic Verisini Çek
             var topicPayload = context.GetOutput<TopicStagePayload>(StageType.Topic);
             if (topicPayload == null || string.IsNullOrEmpty(topicPayload.TopicText))
                 throw new InvalidOperationException("Önceki adımdan (Topic) veri alınamadı.");
 
-            await logAsync($"Source Topic ID: {topicPayload.TopicId} - '{topicPayload.TopicText}'");
+            await logAsync($"Kaynak konu alındı. Topic ID: {topicPayload.TopicId}, özet: '{PipelineLiveLog.Shorten(topicPayload.TopicText)}'.");
 
             // 2. AI İstemcisi
             var aiClient = await _aiFactory.ResolveTextClientAsync(run.AppUserId, preset.UserAiConnectionId, ct);
@@ -87,7 +87,7 @@ namespace Application.Executors
             if (preset.IncludeCta) userPrompt += "\nRequirement: End with a call to action.";
 
             // 5. AI Çağrısı
-            await logAsync("🤖 Sending prompt to AI...");
+            await logAsync("AI'ya senaryo prompt'u gönderiliyor.");
 
             var responseJson = await aiClient.GenerateTextAsync(
                 prompt: $"{systemPrompt}\n\n{userPrompt}",
@@ -96,63 +96,36 @@ namespace Application.Executors
                 ct: ct
             );
 
-            await logAsync("✨ AI response received. Parsing JSON...");
+            await logAsync("AI yanıtı alındı. Senaryo JSON çıktısı ayrıştırılıyor.");
 
             // =================================================================
             // 🔥 REVİZE 2: JSON PARSE (Object -> Metadata + Scenes Array)
             // =================================================================
             var cleanJson = CleanJson(responseJson);
-            var scenes = new List<ScriptSceneItem>();
-            var fullTextBuilder = new StringBuilder();
-
-            // Yeni değişkenlerimiz
-            string aiTitle = "";
-            string aiDescription = "";
-            List<string> aiTags = new();
+            ParsedScriptResult parsedScript;
 
             try
             {
-                using var doc = JsonDocument.Parse(cleanJson);
-                var root = doc.RootElement;
-
-                // A) Metadata Okuma
-                aiTitle = GetStr(root, "title");
-                aiDescription = GetStr(root, "description");
-
-                // Tags Okuma
-                if (root.TryGetProperty("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var t in tagsEl.EnumerateArray()) aiTags.Add(t.GetString() ?? "");
-                }
-
-                // B) Sahneleri Okuma
-                if (root.TryGetProperty("scenes", out var scenesEl) && scenesEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var element in scenesEl.EnumerateArray())
-                    {
-                        var audio = GetStr(element, "audio");
-                        scenes.Add(new ScriptSceneItem
-                        {
-                            SceneNumber = GetInt(element, "scene"),
-                            VisualPrompt = GetStr(element, "visual"),
-                            AudioText = audio,
-                            EstimatedDuration = GetInt(element, "duration")
-                        });
-                        fullTextBuilder.AppendLine(audio);
-                    }
-                }
-                else
-                {
-                    throw new Exception("JSON içinde 'scenes' dizisi bulunamadı.");
-                }
+                parsedScript = ParseScriptJson(cleanJson);
             }
             catch (Exception ex)
             {
-                await logAsync($"❌ JSON Parse Error: {ex.Message}");
+                await logAsync(PipelineLiveLog.Error($"Senaryo JSON ayrıştırma hatası: {ex.Message}"));
                 // Debug için ham veriyi loga basabiliriz (kısa halini)
                 var preview = responseJson.Length > 200 ? responseJson.Substring(0, 200) + "..." : responseJson;
                 throw new InvalidOperationException($"AI geçersiz JSON döndürdü: {ex.Message}. Raw: {preview}");
             }
+
+            var scenes = parsedScript.Scenes;
+            var fullTextBuilder = new StringBuilder();
+            foreach (var scene in scenes)
+            {
+                fullTextBuilder.AppendLine(scene.AudioText);
+            }
+
+            string aiTitle = parsedScript.Title;
+            string aiDescription = parsedScript.Description;
+            List<string> aiTags = parsedScript.Tags;
 
             // 7. DB'ye Kayıt
             // Eğer Script tablosunda Description/Tags sütunu yoksa şimdilik Content veya Title'a sığdırmayalım.
@@ -180,7 +153,7 @@ namespace Application.Executors
             await _scriptRepo.AddAsync(scriptEntity, ct);
             await _uow.SaveChangesAsync(ct);
 
-            await logAsync($"✅ Script saved. ID: {scriptEntity.Id}, Total Scenes: {scenes.Count}");
+            await logAsync(PipelineLiveLog.Success($"Senaryo kaydedildi. ID: {scriptEntity.Id}, sahne sayısı: {scenes.Count}, tahmini süre: {scriptEntity.EstimatedDurationSec} sn."));
 
             // =================================================================
             // 🔥 REVİZE 3: PAYLOAD'I DOLU DOLU DÖNMEK
@@ -202,16 +175,220 @@ namespace Application.Executors
         private string CleanJson(string text)
         {
             text = text.Trim();
-            // Markdown temizliği
-            if (text.StartsWith("```json")) text = text.Replace("```json", "").Replace("```", "");
-            else if (text.StartsWith("```")) text = text.Replace("```", "");
+
+            if (text.StartsWith("```", StringComparison.Ordinal))
+            {
+                var firstNewLine = text.IndexOf('\n');
+                if (firstNewLine >= 0) text = text[(firstNewLine + 1)..];
+                if (text.EndsWith("```", StringComparison.Ordinal)) text = text[..^3];
+            }
+
+            var firstJsonChar = text.IndexOfAny(new[] { '{', '[' });
+            if (firstJsonChar > 0) text = text[firstJsonChar..];
+
+            var lastObjectEnd = text.LastIndexOf('}');
+            var lastArrayEnd = text.LastIndexOf(']');
+            var lastJsonChar = Math.Max(lastObjectEnd, lastArrayEnd);
+            if (lastJsonChar >= 0 && lastJsonChar < text.Length - 1)
+                text = text[..(lastJsonChar + 1)];
+
             return text.Trim();
         }
 
-        private string GetStr(JsonElement el, string prop)
-            => el.TryGetProperty(prop, out var p) ? p.GetString() ?? "" : "";
+        private static ParsedScriptResult ParseScriptJson(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
 
-        private int GetInt(JsonElement el, string prop)
-            => el.TryGetProperty(prop, out var p) && p.TryGetInt32(out var i) ? i : 5;
+            var result = new ParsedScriptResult();
+            JsonElement scenesElement;
+
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                scenesElement = root;
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                result.Title = GetStr(root, "title", "videoTitle", "name");
+                result.Description = GetStr(root, "description", "videoDescription", "summary");
+                result.Tags = GetStringList(root, "tags", "hashtags", "keywords");
+
+                if (TryGetProperty(root, out scenesElement, "scenes", "segments", "items"))
+                {
+                    if (scenesElement.ValueKind != JsonValueKind.Array)
+                        throw new InvalidOperationException("'scenes' alanı array olmalı.");
+                }
+                else if (LooksLikeScene(root))
+                {
+                    var singleScene = ReadScene(root, 1);
+                    if (singleScene != null) result.Scenes.Add(singleScene);
+                    return EnsureValidParsedScript(result);
+                }
+                else
+                {
+                    throw new InvalidOperationException("JSON object içinde 'scenes' dizisi bulunamadı.");
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException("JSON kökü object veya array olmalı.");
+            }
+
+            var ordinal = 1;
+            foreach (var element in scenesElement.EnumerateArray())
+            {
+                var scene = ReadScene(element, ordinal);
+                if (scene != null)
+                {
+                    result.Scenes.Add(scene);
+                    ordinal++;
+                }
+            }
+
+            return EnsureValidParsedScript(result);
+        }
+
+        private static ParsedScriptResult EnsureValidParsedScript(ParsedScriptResult result)
+        {
+            if (!result.Scenes.Any())
+                throw new InvalidOperationException("JSON içinde okunabilir sahne bulunamadı.");
+
+            return result;
+        }
+
+        private static ScriptSceneItem? ReadScene(JsonElement element, int fallbackSceneNumber)
+        {
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                var text = element.GetString()?.Trim() ?? "";
+                if (string.IsNullOrWhiteSpace(text)) return null;
+
+                return new ScriptSceneItem
+                {
+                    SceneNumber = fallbackSceneNumber,
+                    VisualPrompt = text,
+                    AudioText = text,
+                    EstimatedDuration = 5
+                };
+            }
+
+            if (element.ValueKind != JsonValueKind.Object)
+                return null;
+
+            var audio = GetStr(element, "audio", "audioText", "voiceover", "voiceOver", "narration", "text", "script", "dialogue", "line");
+            var visual = GetStr(element, "visual", "visualPrompt", "imagePrompt", "sceneDescription", "description", "image", "prompt");
+
+            if (string.IsNullOrWhiteSpace(audio) && string.IsNullOrWhiteSpace(visual))
+                return null;
+
+            if (string.IsNullOrWhiteSpace(visual)) visual = audio;
+
+            var sceneNumber = GetInt(element, fallbackSceneNumber, "scene", "sceneNumber", "number", "index", "id");
+            if (sceneNumber <= 0) sceneNumber = fallbackSceneNumber;
+
+            var duration = GetInt(element, 5, "duration", "durationSec", "estimatedDuration", "estimatedDurationSec", "seconds");
+            if (duration <= 0) duration = 5;
+
+            return new ScriptSceneItem
+            {
+                SceneNumber = sceneNumber,
+                VisualPrompt = visual,
+                AudioText = audio,
+                EstimatedDuration = duration
+            };
+        }
+
+        private static bool LooksLikeScene(JsonElement element)
+            => GetStr(element, "audio", "audioText", "voiceover", "voiceOver", "narration", "text", "script", "dialogue", "line") != ""
+               || GetStr(element, "visual", "visualPrompt", "imagePrompt", "sceneDescription", "description", "image", "prompt") != "";
+
+        private static bool TryGetProperty(JsonElement el, out JsonElement value, params string[] names)
+        {
+            if (el.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in el.EnumerateObject())
+                {
+                    if (names.Any(name => string.Equals(name, property.Name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        value = property.Value;
+                        return true;
+                    }
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        private static string GetStr(JsonElement el, params string[] props)
+        {
+            if (!TryGetProperty(el, out var p, props)) return "";
+
+            return p.ValueKind switch
+            {
+                JsonValueKind.String => p.GetString()?.Trim() ?? "",
+                JsonValueKind.Number => p.GetRawText(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => ""
+            };
+        }
+
+        private static List<string> GetStringList(JsonElement el, params string[] props)
+        {
+            if (!TryGetProperty(el, out var p, props)) return new List<string>();
+
+            if (p.ValueKind == JsonValueKind.Array)
+            {
+                return p.EnumerateArray()
+                    .Select(ToPlainString)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            var raw = ToPlainString(p);
+            if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
+
+            var separators = raw.Contains(',') || raw.Contains(';') || raw.Contains('\n')
+                ? new[] { ',', ';', '\n', '\r' }
+                : new[] { ' ' };
+
+            return raw.Split(separators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static string ToPlainString(JsonElement el)
+            => el.ValueKind == JsonValueKind.String ? el.GetString() ?? "" : el.GetRawText();
+
+        private static int GetInt(JsonElement el, int fallback, params string[] props)
+        {
+            if (!TryGetProperty(el, out var p, props)) return fallback;
+
+            if (p.ValueKind == JsonValueKind.Number)
+            {
+                if (p.TryGetInt32(out var i)) return i;
+                if (p.TryGetDouble(out var d)) return (int)Math.Round(d);
+            }
+
+            if (p.ValueKind == JsonValueKind.String
+                && double.TryParse(p.GetString(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            {
+                return (int)Math.Round(parsed);
+            }
+
+            return fallback;
+        }
+
+        private sealed class ParsedScriptResult
+        {
+            public string Title { get; set; } = "";
+            public string Description { get; set; } = "";
+            public List<string> Tags { get; set; } = new();
+            public List<ScriptSceneItem> Scenes { get; set; } = new();
+        }
     }
 }

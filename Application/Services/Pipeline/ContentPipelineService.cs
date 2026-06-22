@@ -89,6 +89,9 @@ namespace Application.Services.Pipeline
 
             // 🔥 VİDEO URL'İNİ BULMA MANTIĞI
             string? videoUrl = null;
+            int? videoWidth = null;
+            int? videoHeight = null;
+            string? videoAspectRatio = null;
 
             // 1. Render aşamasını bul
             var renderExec = run.StageExecutions.FirstOrDefault(x => x.StageConfig.StageType == StageType.Render);
@@ -100,6 +103,9 @@ namespace Application.Services.Pipeline
                 {
                     var payload = JsonSerializer.Deserialize<RenderStagePayload>(renderExec.OutputJson);
                     videoUrl = payload?.VideoUrl; // URL'i kaptık!
+                    videoWidth = payload?.Width > 0 ? payload.Width : null;
+                    videoHeight = payload?.Height > 0 ? payload.Height : null;
+                    videoAspectRatio = payload?.AspectRatio;
                 }
                 catch { /* JSON bozuksa yapacak bir şey yok, null kalsın */ }
             }
@@ -112,6 +118,9 @@ namespace Application.Services.Pipeline
                 CompletedAt = run.CompletedAt,
                 ErrorMessage = run.ErrorMessage,
                 FinalVideoUrl = videoUrl,
+                FinalVideoWidth = videoWidth,
+                FinalVideoHeight = videoHeight,
+                FinalVideoAspectRatio = videoAspectRatio,
                 Stages = run.StageExecutions.OrderBy(x => x.StageConfig.Order).Select(s => new PipelineStageDto
                 {
                     StageType = s.StageConfig.StageType.ToString(),

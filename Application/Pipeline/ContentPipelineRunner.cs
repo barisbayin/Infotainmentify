@@ -40,20 +40,28 @@ namespace Application.Pipeline
         // -----------------------------------------------------------------------
         // 🔥 HELPER: Merkezi Loglama (Hem DB hem SignalR)
         // -----------------------------------------------------------------------
-        private async Task LogAsync(StageExecution exec, string message)
+        private async Task SendRunLogAsync(int runId, string message)
         {
-            // 1. Veritabanına kaydet (Kalıcılık)
-            exec.AddLog(message);
-
-            // 2. SignalR ile canlı terminale gönder (Anlık İzleme)
             try
             {
-                await _notifier.SendLogAsync(exec.ContentPipelineRunId, message);
+                var normalizedMessage = PipelineLiveLog.Info(message);
+                await _notifier.SendLogAsync(runId, PipelineLiveLog.WithTimestamp(normalizedMessage));
             }
             catch
             {
-                // SignalR hatası ana akışı bozmasın (Fire & Forget)
+                // SignalR hatası ana akışı bozmasın.
             }
+        }
+
+        private async Task LogAsync(StageExecution exec, string message)
+        {
+            var normalizedMessage = PipelineLiveLog.Info(message);
+
+            // 1. Veritabanına kaydet (Kalıcılık)
+            exec.AddLog(normalizedMessage);
+
+            // 2. SignalR ile canlı terminale gönder (Anlık İzleme)
+            await SendRunLogAsync(exec.ContentPipelineRunId, normalizedMessage);
         }
         // -----------------------------------------------------------------------
         // 🚀 MAIN RUN METHOD
@@ -85,7 +93,7 @@ namespace Application.Pipeline
             }
 
             // Başlangıç Logu
-            await _notifier.SendLogAsync(run.Id, "🚀 Pipeline execution started...");
+            await SendRunLogAsync(run.Id, $"Üretim hattı başlatıldı. Run #{run.Id}.");
 
             // Context oluştur ve sıralamayı al
             var context = new PipelineContext(run);
@@ -132,6 +140,7 @@ namespace Application.Pipeline
                 if (exec.Status == StageStatus.Completed)
                 {
                     HydrateContext(context, stageConfig.StageType, exec.OutputJson);
+                    await SendRunLogAsync(run.Id, $"Daha önce tamamlanan aşama hafızaya alındı ve atlandı: {PipelineLiveLog.StageName(stageConfig.StageType)}.");
                     // Zaten biten aşamalar için döngünün sonundaki "Fren Kontrolü"ne girmeden devam et.
                     // Bu sayede Onay sonrası tekrar başladığında Render'ı atlar, direkt Upload'a gider.
                     continue;
@@ -141,9 +150,9 @@ namespace Application.Pipeline
                 if (exec.Status == StageStatus.PermanentlyFailed)
                 {
                     run.Status = ContentPipelineStatus.Failed;
-                    run.ErrorMessage = $"Pipeline stopped because stage failed: {stageConfig.StageType}";
+                    run.ErrorMessage = $"Üretim hattı durdu. Başarısız aşama: {PipelineLiveLog.StageName(stageConfig.StageType)}";
                     await _uow.SaveChangesAsync(ct);
-                    await _notifier.SendLogAsync(run.Id, $"❌ Pipeline stopped. Stage {stageConfig.StageType} failed.");
+                    await SendRunLogAsync(run.Id, PipelineLiveLog.Error($"Üretim hattı durdu. Aşama kalıcı olarak başarısız: {PipelineLiveLog.StageName(stageConfig.StageType)}."));
                     return;
                 }
 
@@ -155,7 +164,7 @@ namespace Application.Pipeline
                     run.Status = ContentPipelineStatus.Failed;
                     run.ErrorMessage = exec.Error;
                     await _uow.SaveChangesAsync(ct);
-                    await _notifier.SendLogAsync(run.Id, $"❌ Pipeline Failed at {stageConfig.StageType}.");
+                    await SendRunLogAsync(run.Id, PipelineLiveLog.Error($"Üretim hattı başarısız oldu. Duran aşama: {PipelineLiveLog.StageName(stageConfig.StageType)}."));
                     return;
                 }
 
@@ -173,12 +182,12 @@ namespace Application.Pipeline
                     if (run.AutoPublish)
                     {
                         // Otomatik Yayın Açık -> Durmak yok, yola devam! 🏎️
-                        await _notifier.SendLogAsync(run.Id, "⏩ Auto-Publish enabled. Proceeding to Upload immediately...");
+                        await SendRunLogAsync(run.Id, "Otomatik yayın açık. Render sonrası yükleme aşamasına geçiliyor.");
                     }
                     else
                     {
                         // Otomatik Yayın Kapalı -> FREN! 🛑
-                        await _notifier.SendLogAsync(run.Id, "✋ Render completed. Stopping for manual approval (AutoPublish: OFF).");
+                        await SendRunLogAsync(run.Id, "Render tamamlandı. Otomatik yayın kapalı olduğu için manuel onay bekleniyor.");
 
                         run.Status = ContentPipelineStatus.WaitingForApproval;
                         await _uow.SaveChangesAsync(ct);
@@ -195,7 +204,7 @@ namespace Application.Pipeline
             await _uow.SaveChangesAsync(ct);
 
             // Bitiş Logu
-            await _notifier.SendLogAsync(run.Id, "✅ Pipeline execution completed successfully! 🎉");
+            await SendRunLogAsync(run.Id, PipelineLiveLog.Success("Üretim hattı başarıyla tamamlandı."));
         }
 
         // -----------------------------------------------------------------------
@@ -209,8 +218,9 @@ namespace Application.Pipeline
             CancellationToken ct)
         {
             var executor = _executorFactory.Resolve(config.StageType);
+            var stageName = PipelineLiveLog.StageName(config.StageType);
 
-            await LogAsync(exec, $"▶️ Starting stage: {config.StageType}...");
+            await LogAsync(exec, $"Aşama sıraya alındı: {stageName}.");
 
             for (int attempt = 0; attempt <= MaxRetryCount; attempt++)
             {
@@ -218,14 +228,20 @@ namespace Application.Pipeline
                 {
                     exec.Status = StageStatus.Retrying;
                     exec.RetryCount = attempt;
-                    await LogAsync(exec, $"⚠️ Retry attempt {attempt}/{MaxRetryCount} for {config.StageType}...");
+                    await LogAsync(exec, PipelineLiveLog.Warning($"Aşama yeniden deneniyor: {stageName}. Deneme {attempt}/{MaxRetryCount}."));
                     await _uow.SaveChangesAsync(ct);
                 }
 
                 // Executor'ı çalıştır
                 // Not: Executor içindeki loglar, eğer executor LogAsync kullanmıyorsa SignalR'a düşmez.
                 // İleride Executorlara da loglama yeteneği verebilirsin.
-                var result = await executor.ExecuteAsync(run, config, exec, context, ct);
+                var result = await executor.ExecuteAsync(
+                    run,
+                    config,
+                    exec,
+                    context,
+                    ct,
+                    message => SendRunLogAsync(run.Id, message));
 
                 if (result.Success)
                 {
@@ -237,12 +253,12 @@ namespace Application.Pipeline
                         await _uow.SaveChangesAsync(ct);
                     }
 
-                    await LogAsync(exec, $"✅ Stage {config.StageType} completed.");
+                    await LogAsync(exec, PipelineLiveLog.Success($"Aşama başarılı bitti: {stageName}."));
                     return true;
                 }
 
                 // Hata Durumu
-                await LogAsync(exec, $"❌ Attempt {attempt} failed: {result.Error}");
+                await LogAsync(exec, PipelineLiveLog.Error($"Aşama denemesi başarısız oldu: {stageName}. Deneme: {attempt + 1}. Hata: {PipelineLiveLog.Shorten(result.Error, 500)}"));
 
                 // Retry Limiti Doldu mu?
                 if (attempt == MaxRetryCount)
@@ -250,11 +266,12 @@ namespace Application.Pipeline
                     exec.Status = StageStatus.PermanentlyFailed;
                     exec.Error = result.Error ?? "Unknown error";
                     await _uow.SaveChangesAsync(ct);
-                    await LogAsync(exec, $"💀 Stage {config.StageType} PERMANENTLY FAILED. Giving up.");
+                    await LogAsync(exec, PipelineLiveLog.Error($"Aşama kalıcı olarak başarısız oldu: {stageName}. Yeniden deneme hakkı kalmadı."));
                     return false;
                 }
 
                 // Backoff (Bekleme)
+                await LogAsync(exec, $"Bir sonraki denemeden önce {attempt + 1} saniye bekleniyor.");
                 await Task.Delay(1000 * (attempt + 1), ct);
             }
 
@@ -329,7 +346,7 @@ namespace Application.Pipeline
                 stageExec.StageConfig.PresetId = newPresetId.Value;
 
                 // Log ekleyelim (Senin Notifier yapınla)
-                await _notifier.SendLogAsync(run.Id, $"⚙️ Render Preset updated to ID: {newPresetId.Value}");
+                await SendRunLogAsync(run.Id, $"Render preset güncellendi. Yeni preset ID: {newPresetId.Value}.");
             }
 
             // 2. Sicili Temizle (Reset)
@@ -364,7 +381,7 @@ namespace Application.Pipeline
             }
 
             await _uow.SaveChangesAsync(ct);
-            await _notifier.SendLogAsync(run.Id, $"🔄 Retry requested for stage: {stageTypeStr}. Pipeline restarting...");
+            await SendRunLogAsync(run.Id, $"Aşama yeniden çalıştırma isteği alındı: {PipelineLiveLog.StageName(typeEnum)}. Üretim hattı tekrar başlatılıyor.");
 
             // 3. Arka Planda Yeniden Başlat (Fire & Forget)
             await Task.Delay(200); // Concurrency önlemi

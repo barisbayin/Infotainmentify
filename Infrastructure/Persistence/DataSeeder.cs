@@ -25,32 +25,70 @@ namespace Infrastructure.Persistence
 
         public async Task SeedAdminAsync(CancellationToken ct = default)
         {
-            var email = (_cfg["Admin:Email"] ?? Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? "admin@local").Trim().ToLowerInvariant();
-            var username = (_cfg["Admin:Username"] ?? Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "admin").Trim().ToLowerInvariant();
+            var email = NormalizeEmail(_cfg["Admin:Email"] ?? Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? "admin@local");
+            var username = SlugifyUsername(_cfg["Admin:Username"] ?? Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "admin");
+            if (string.IsNullOrWhiteSpace(username)) username = "admin";
+
             var password = _cfg["Admin:Password"] ?? Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? "ChangeMe!123";
+            var resetPassword = ShouldResetAdminPasswordOnStartup();
 
             await _uow.ExecuteInTransactionAsync(async () =>
             {
-                if (await _repo.AnyAsync(u => u.Role == UserRole.Admin, ct)) return;
-                if (await _repo.AnyAsync(u => u.Email == email || u.Username == username, ct)) return;
+                var user = await _repo.FirstOrDefaultAsync(
+                    u => u.Email == email || u.Username == username,
+                    asNoTracking: false,
+                    ct: ct);
 
-                var user = new AppUser
+                if (user is null)
                 {
-                    Email = email,
-                    Username = username,
-                    Role = UserRole.Admin,
-                    DirectoryName = "pending"
-                };
+                    if (await _repo.AnyAsync(u => u.Role == UserRole.Admin, ct)) return;
 
-                // ÖNEMLİ: Identity formatında hashle
-                user.PasswordHash = _identityHasher.HashPassword(user, password);
+                    user = new AppUser
+                    {
+                        Email = email,
+                        Username = username,
+                        Role = UserRole.Admin,
+                        DirectoryName = "pending",
+                        IsActive = true,
+                        Removed = false
+                    };
+                    user.PasswordHash = _identityHasher.HashPassword(user, password);
 
-                await _repo.AddAsync(user, ct);
-                await _uow.SaveChangesAsync(ct);
+                    await _repo.AddAsync(user, ct);
+                    await _uow.SaveChangesAsync(ct);
 
-                user.DirectoryName = $"{user.Id}_{username}";
+                    user.DirectoryName = $"{user.Id}_{username}";
+                    await _uow.SaveChangesAsync(ct);
+                    return;
+                }
+
+                user.Email = email;
+                user.Username = username;
+                user.Role = UserRole.Admin;
+                user.IsActive = true;
+                user.Removed = false;
+                user.RemovedAt = null;
+
+                if (string.IsNullOrWhiteSpace(user.DirectoryName) || user.DirectoryName == "pending")
+                {
+                    user.DirectoryName = $"{user.Id}_{username}";
+                }
+
+                if (resetPassword || string.IsNullOrWhiteSpace(user.PasswordHash))
+                {
+                    user.PasswordHash = _identityHasher.HashPassword(user, password);
+                }
+
                 await _uow.SaveChangesAsync(ct);
             }, ct);
+        }
+
+        private bool ShouldResetAdminPasswordOnStartup()
+        {
+            var configured = _cfg["Admin:ResetPasswordOnStartup"]
+                ?? Environment.GetEnvironmentVariable("ADMIN_RESET_PASSWORD_ON_STARTUP");
+
+            return bool.TryParse(configured, out var enabled) && enabled;
         }
 
 
