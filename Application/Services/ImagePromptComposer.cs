@@ -240,9 +240,13 @@ namespace Application.Services
 
         private static StoryboardVisualBeat BuildFallbackBeat(ScriptSceneItem scene, string? styleBible, int beatIndex)
         {
+            var narrationFocus = ExtractNarrationFocus(scene.AudioText, beatIndex, Math.Max(beatIndex, EstimateVisualBeatCount(scene)));
             var visualPrompt = string.IsNullOrWhiteSpace(styleBible)
                 ? scene.VisualPrompt
                 : $"{scene.VisualPrompt}, {styleBible}";
+
+            if (!string.IsNullOrWhiteSpace(narrationFocus))
+                visualPrompt = $"{visualPrompt}. Narration focus for this visual beat: {narrationFocus}.";
 
             return new StoryboardVisualBeat
             {
@@ -250,7 +254,7 @@ namespace Application.Services
                 BeatRole = beatIndex == 1 ? FirstNonEmpty(scene.VisualVarietyRole, "primary") : PickRole(beatIndex),
                 ShotType = PickShotType(scene.VisualType, beatIndex),
                 CameraMotion = PickCameraMotion(scene.CameraPlan, beatIndex),
-                Subject = beatIndex == 1 ? "main narration idea" : "supporting visual evidence",
+                Subject = beatIndex == 1 ? FirstNonEmpty(narrationFocus, "main narration idea") : FirstNonEmpty(narrationFocus, "supporting visual evidence"),
                 Composition = PickComposition(scene.VisualType, beatIndex),
                 Lens = beatIndex == 1 ? "35mm documentary lens" : "50mm detail lens",
                 Lighting = "motivated soft cinematic light",
@@ -270,9 +274,11 @@ namespace Application.Services
             int beatIndex,
             string? styleBible)
         {
+            var desiredBeatCount = EstimateVisualBeatCount(scene);
+            var narrationFocus = ExtractNarrationFocus(scene.AudioText, beatIndex, desiredBeatCount);
             var visualPrompt = FirstNonEmpty(baseBeat.VisualPrompt, scene.VisualPrompt);
             var supplement =
-                $"Alternate visual beat {beatIndex} for the same narration: {PickRole(beatIndex)} angle, {PickShotType(scene.VisualType, beatIndex)}, {PickComposition(scene.VisualType, beatIndex)}. Keep the same concept, characters and style, but change the composition enough to justify a human editor cut. Do not add text unless explicitly requested.";
+                $"Alternate visual beat {beatIndex} for the same scene narration. Narration focus: {FirstNonEmpty(narrationFocus, "the next meaningful idea inside the same narration")}. Use a {PickRole(beatIndex)} angle, {PickShotType(scene.VisualType, beatIndex)}, {PickComposition(scene.VisualType, beatIndex)}. Keep the same concept, characters and style, but make the image specifically support this narration focus. Do not drift into a new topic. Do not add text unless explicitly requested.";
 
             if (!string.IsNullOrWhiteSpace(styleBible))
                 supplement += $" Style continuity: {styleBible}.";
@@ -347,6 +353,28 @@ namespace Application.Services
 
         private static string FirstNonEmpty(params string?[] values) =>
             values.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? "";
+
+        private static string ExtractNarrationFocus(string? audioText, int beatIndex, int beatCount)
+        {
+            if (string.IsNullOrWhiteSpace(audioText)) return "";
+
+            var parts = audioText
+                .Replace("*", "")
+                .Split(new[] { ". ", "? ", "! ", "; ", ": ", ", but ", ", then ", ", and " }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim(' ', '.', '?', '!', ';', ':', ','))
+                .Where(x => x.Length >= 12)
+                .ToList();
+
+            if (parts.Count == 0)
+                return audioText.Length <= 220 ? audioText.Trim() : audioText.Trim()[..220];
+
+            var targetCount = Math.Clamp(beatCount, 1, MaxVisualBeatsPerScene);
+            var targetIndex = Math.Clamp(beatIndex - 1, 0, targetCount - 1);
+            var partIndex = Math.Clamp((int)Math.Round(targetIndex * (parts.Count - 1) / Math.Max(1.0, targetCount - 1.0)), 0, parts.Count - 1);
+            var focus = parts[partIndex];
+
+            return focus.Length <= 220 ? focus : focus[..220];
+        }
 
         private static string DefaultShotType(string visualType)
         {

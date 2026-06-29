@@ -482,21 +482,29 @@ Script scenes:
 
             for (var i = 0; i < beatCount; i++)
             {
+                var beatIndex = i + 1;
+                var narrationFocus = ExtractNarrationFocus(scene.AudioText, beatIndex, beatCount);
+                var focusClause = string.IsNullOrWhiteSpace(narrationFocus)
+                    ? ""
+                    : $", narration focus for this beat: {narrationFocus}";
+
                 plan.VisualBeats.Add(new StoryboardVisualBeat
                 {
-                    BeatIndex = i + 1,
+                    BeatIndex = beatIndex,
                     BeatRole = roles[i],
                     ShotType = shotTypes[i],
                     CameraMotion = motions[i],
-                    Subject = i == 0 ? "main idea of the narration" : "supporting visual evidence",
+                    Subject = i == 0 ? FirstNonEmpty(narrationFocus, "main idea of the narration") : FirstNonEmpty(narrationFocus, "supporting visual evidence"),
                     Composition = i == 0 ? "clean subject-led composition with readable negative space" : "off-center detail composition to create visual refresh",
                     Lens = i == 0 ? "35mm documentary lens" : "50mm shallow depth of field",
                     Lighting = "motivated cinematic soft light",
                     ColorNotes = chapter?.VisualMotif ?? "keep palette consistent with the video color bible",
                     ContinuityNotes = "connect to the chapter motif while changing scale or angle",
                     NegativePrompt = "text, watermark, logo, distorted hands, generic stock photo",
-                    CutIntent = i == 0 ? FirstNonEmpty(scene.VisualVarietyReason, "establish the scene idea") : "refresh attention with a new angle",
-                    VisualPrompt = $"{scene.VisualPrompt}, visual format: {scene.VisualType}, variety role: {scene.VisualVarietyRole}, {shotTypes[i]}, {styleBible}",
+                    CutIntent = i == 0
+                        ? FirstNonEmpty(scene.VisualVarietyReason, "establish the scene idea")
+                        : $"refresh attention with a new angle tied to this narration focus: {FirstNonEmpty(narrationFocus, "supporting visual evidence")}",
+                    VisualPrompt = $"{scene.VisualPrompt}{focusClause}, visual format: {scene.VisualType}, variety role: {scene.VisualVarietyRole}, {shotTypes[i]}, {styleBible}",
                     DurationWeight = i == 0 ? 1.2 : 1.0
                 });
             }
@@ -579,6 +587,28 @@ Script scenes:
                 OnScreenText = beat.OnScreenText,
                 DurationWeight = beat.DurationWeight
             };
+
+        private static string ExtractNarrationFocus(string? audioText, int beatIndex, int beatCount)
+        {
+            if (string.IsNullOrWhiteSpace(audioText)) return "";
+
+            var parts = audioText
+                .Replace("*", "")
+                .Split(new[] { ". ", "? ", "! ", "; ", ": ", ", but ", ", then ", ", and " }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim(' ', '.', '?', '!', ';', ':', ','))
+                .Where(x => x.Length >= 12)
+                .ToList();
+
+            if (parts.Count == 0)
+                return audioText.Length <= 220 ? audioText.Trim() : audioText.Trim()[..220];
+
+            var targetCount = Math.Clamp(beatCount, 1, MaxBeatsPerScene);
+            var targetIndex = Math.Clamp(beatIndex - 1, 0, targetCount - 1);
+            var partIndex = Math.Clamp((int)Math.Round(targetIndex * (parts.Count - 1) / Math.Max(1.0, targetCount - 1.0)), 0, parts.Count - 1);
+            var focus = parts[partIndex];
+
+            return focus.Length <= 220 ? focus : focus[..220];
+        }
 
         private static string CleanJson(string text)
         {
