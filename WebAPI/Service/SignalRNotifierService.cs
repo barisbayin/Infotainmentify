@@ -1,4 +1,5 @@
 ﻿using Application.Abstractions;
+using Application.Models;
 using Microsoft.AspNetCore.SignalR;
 using WebAPI.Hubs;
 
@@ -43,6 +44,14 @@ namespace WebAPI.Service
             // Frontend'de .on("ReceiveLog", ...) ile dinleyeceğiz
             await _hub.Clients.Group($"run-{runId}")
                               .SendAsync("ReceiveLog", message);
+        }
+
+        public async Task SendRenderProgressAsync(int runId, RenderProgressUpdate progress)
+        {
+            progress.RunId = runId;
+
+            await _hub.Clients.Group($"run-{runId}")
+                              .SendAsync("RenderProgress", progress);
         }
     }
 }

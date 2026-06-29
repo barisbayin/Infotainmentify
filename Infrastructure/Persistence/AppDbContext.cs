@@ -1,5 +1,6 @@
 ﻿using Core.Abstractions;
 using Core.Entity;
+using Core.Entity.Pipeline;
 using Core.Entity.User;
 using Infrastructure.Configurations;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,8 @@ namespace Infrastructure.Persistence
         public DbSet<Prompt> Prompts => Set<Prompt>();
         public DbSet<Topic> Topics => Set<Topic>();
         public DbSet<AppUser> AppUsers => Set<AppUser>();
+        public DbSet<SavedProductionBrief> SavedProductionBriefs => Set<SavedProductionBrief>();
+        public DbSet<ProductionConceptProfile> ProductionConceptProfiles => Set<ProductionConceptProfile>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

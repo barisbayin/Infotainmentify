@@ -6,6 +6,7 @@ using Core.Attributes;
 using Core.Entity.Pipeline;
 using Core.Entity.Presets;
 using Core.Enums;
+using NAudio.Wave;
 
 namespace Application.Executors
 {
@@ -92,16 +93,18 @@ namespace Application.Executors
                     var fullPath = Path.Combine(outputDir, fileName);
 
                     await File.WriteAllBytesAsync(fullPath, audioBytes, ct);
+                    var durationSec = GetAudioDurationSec(fullPath);
 
                     results.Add(new SceneAudioItem
                     {
                         SceneNumber = scene.SceneNumber,
                         AudioFilePath = fullPath,
-                        TextSpoken = scene.AudioText
+                        TextSpoken = scene.AudioText,
+                        DurationSec = durationSec
                     });
 
                     successCount++;
-                    await logAsync(PipelineLiveLog.Success($"Sahne {scene.SceneNumber} sesi hazır. Dosya: {fileName}."));
+                    await logAsync(PipelineLiveLog.Success($"Sahne {scene.SceneNumber} sesi hazır. Süre: {durationSec:F1} sn, dosya: {fileName}."));
                 }
                 catch (Exception ex)
                 {
@@ -129,5 +132,18 @@ namespace Application.Executors
         // --- Helpers ---
         private string FormatRate(double rate) => rate.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         private string FormatPitch(double pitch) => pitch.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+
+        private static double GetAudioDurationSec(string path)
+        {
+            try
+            {
+                using var reader = new AudioFileReader(path);
+                return Math.Round(reader.TotalTime.TotalSeconds, 3);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
     }
 }

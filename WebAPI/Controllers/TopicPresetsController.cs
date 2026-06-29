@@ -1,5 +1,6 @@
 ﻿using Application.Contracts.Presets;
 using Application.Extensions;
+using Application.Services;
 using Application.Services.PresetService;
 using Core.Entity.Presets;
 using Microsoft.AspNetCore.Authorization;
@@ -67,9 +68,9 @@ namespace WebAPI.Controllers
                 ModelName = dto.ModelName,
                 Temperature = dto.Temperature,
                 Language = dto.Language,
-                PromptTemplate = dto.PromptTemplate,
+                PromptTemplate = TopicPromptDefaults.ResolvePromptTemplate(dto.PromptTemplate),
                 ContextKeywordsJson = dto.ContextKeywordsJson,
-                SystemInstruction = dto.SystemInstruction
+                SystemInstruction = TopicPromptDefaults.CleanOptional(dto.SystemInstruction)
                 // AppUserId, Service içindeki Base metodda set ediliyor
             };
 
@@ -97,9 +98,9 @@ namespace WebAPI.Controllers
             entity.ModelName = dto.ModelName;
             entity.Temperature = dto.Temperature;
             entity.Language = dto.Language;
-            entity.PromptTemplate = dto.PromptTemplate;
+            entity.PromptTemplate = TopicPromptDefaults.ResolvePromptTemplate(dto.PromptTemplate);
             entity.ContextKeywordsJson = dto.ContextKeywordsJson;
-            entity.SystemInstruction = dto.SystemInstruction;
+            entity.SystemInstruction = TopicPromptDefaults.CleanOptional(dto.SystemInstruction);
 
             // 3. Kaydet
             await _service.UpdateAsync(entity, userId, ct);

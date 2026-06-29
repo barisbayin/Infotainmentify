@@ -25,8 +25,8 @@ namespace Application.Contracts.Presets
         [MaxLength(10)]
         public string Language { get; set; } = "tr-TR";
 
-        [Required, MaxLength(5000)]
-        public string PromptTemplate { get; set; } = default!;
+        [MaxLength(5000)]
+        public string? PromptTemplate { get; set; }
 
         // JSON Array string olarak gelir
         public string? ContextKeywordsJson { get; set; }

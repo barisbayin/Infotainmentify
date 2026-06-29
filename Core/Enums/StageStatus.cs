@@ -9,6 +9,8 @@
         Failed = 4,        // Hata verdi ama pipeline durdu
         Retrying = 5,      // Fail sonrası retry deneniyor
         PermanentlyFailed = 6, // Tüm retry limitleri doldu, pipeline iptal
-        Outdated = 7       // Artık geçerli değil
+        Outdated = 7,      // Artık geçerli değil
+        Cancelled = 8,      // Kullanıcı üretimi durdurdu
+        WaitingForApproval = 9 // İnsan onayı bekliyor
     }
 }

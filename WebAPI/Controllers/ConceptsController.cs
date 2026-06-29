@@ -1,9 +1,12 @@
 ﻿using Application.Contracts.Concept;
+using Application.Contracts.ConceptProfiles;
 using Application.Contracts.Mappers;
 using Application.Extensions;
 using Application.Mappers;
 using Application.Services;
 using Core.Abstractions;
+using Core.Contracts;
+using Core.Entity.Pipeline;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,10 +18,23 @@ namespace WebAPI.Controllers
     public class ConceptsController : ControllerBase
     {
         private readonly ConceptService _service;
+        private readonly IRepository<ProductionConceptProfile> _profileRepo;
+        private readonly IRepository<Concept> _conceptRepo;
+        private readonly IRepository<ContentPipelineTemplate> _templateRepo;
+        private readonly IUnitOfWork _uow;
 
-        public ConceptsController(ConceptService service)
+        public ConceptsController(
+            ConceptService service,
+            IRepository<ProductionConceptProfile> profileRepo,
+            IRepository<Concept> conceptRepo,
+            IRepository<ContentPipelineTemplate> templateRepo,
+            IUnitOfWork uow)
         {
             _service = service;
+            _profileRepo = profileRepo;
+            _conceptRepo = conceptRepo;
+            _templateRepo = templateRepo;
+            _uow = uow;
         }
 
         // GET: api/concepts
@@ -36,6 +52,22 @@ namespace WebAPI.Controllers
         {
             var entity = await _service.GetByIdAsync(id, User.GetUserId(), ct);
             return entity is null ? NotFound() : Ok(entity.ToDetailDto());
+        }
+
+        [HttpGet("{id:int}/profile")]
+        public async Task<IActionResult> GetProfile(int id, CancellationToken ct)
+        {
+            var service = new ConceptProfileService(_profileRepo, _conceptRepo, _templateRepo, _uow);
+            var profile = await service.GetOrDefaultAsync(id, User.GetUserId(), ct);
+            return profile is null ? NotFound() : Ok(profile);
+        }
+
+        [HttpPut("{id:int}/profile")]
+        public async Task<IActionResult> SaveProfile(int id, [FromBody] SaveConceptProfileDto dto, CancellationToken ct)
+        {
+            var service = new ConceptProfileService(_profileRepo, _conceptRepo, _templateRepo, _uow);
+            var profile = await service.SaveAsync(id, dto, User.GetUserId(), ct);
+            return Ok(profile);
         }
 
         // POST: api/concepts (SaveConceptDto kullanıyoruz)

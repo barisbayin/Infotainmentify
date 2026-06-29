@@ -1,5 +1,6 @@
 ﻿using Application.Contracts.Presets;
 using Application.Extensions;
+using Application.Services;
 using Application.Services.PresetService;
 using Core.Entity.Presets;
 using Microsoft.AspNetCore.Authorization;
@@ -52,8 +53,8 @@ namespace WebAPI.Controllers
                 ArtStyle = dto.ArtStyle,
                 Size = dto.Size,
                 Quality = dto.Quality,
-                PromptTemplate = dto.PromptTemplate,
-                NegativePrompt = dto.NegativePrompt,
+                PromptTemplate = ImagePromptDefaults.ResolvePromptTemplate(dto.PromptTemplate),
+                NegativePrompt = ImagePromptDefaults.CleanOptional(dto.NegativePrompt),
                 ImageCountPerScene = dto.ImageCountPerScene
             };
 
@@ -75,8 +76,8 @@ namespace WebAPI.Controllers
             entity.ArtStyle = dto.ArtStyle;
             entity.Size = dto.Size;
             entity.Quality = dto.Quality;
-            entity.PromptTemplate = dto.PromptTemplate;
-            entity.NegativePrompt = dto.NegativePrompt;
+            entity.PromptTemplate = ImagePromptDefaults.ResolvePromptTemplate(dto.PromptTemplate);
+            entity.NegativePrompt = ImagePromptDefaults.CleanOptional(dto.NegativePrompt);
             entity.ImageCountPerScene = dto.ImageCountPerScene;
 
             await _service.UpdateAsync(entity, userId, ct);

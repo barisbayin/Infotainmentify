@@ -20,6 +20,10 @@
         public int BrollSegmentDurationSec { get; set; } = 10;
         public int MaxBrollCutsPerScene { get; set; } = 5;
 
+        // Edit plan/storyboard tarafindan gelen kisa vurgu metinlerini final render uzerine basar.
+        // Long-form icin varsayilan kapali; gorselin icindeki metni creative director/image prompt belirlesin.
+        public bool EnableOverlayText { get; set; } = false;
+
         // Video Hızı (Speed Ramp) - İleride eklenebilir
         // public double SpeedMultiplier { get; set; } = 1.0; 
     }

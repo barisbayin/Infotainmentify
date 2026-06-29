@@ -221,8 +221,8 @@ namespace WebAPI
             using (var scope = app.Services.CreateScope())
             {
                 // Veritabaný yoksa oluþtur (Migration uygula)
-                // var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                // db.Database.Migrate();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await db.Database.MigrateAsync();
 
                 // Admin Seed
                 var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();

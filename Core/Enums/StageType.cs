@@ -13,6 +13,8 @@ namespace Core.Enums
         Script = 2,             // Senaryo yazma (Text generation)
         Translation = 3,        // Çeviri (Opsiyonel)
         KeywordAnalysis = 4,    // SEO / Tag üretimi
+        Storyboard = 5,         // Yönetmen planı / visual beat üretimi
+        CreativeDirector = 6,   // Long-form video vaadi, bolum yapisi ve yaratıcı strateji
 
         // --- 2. GÖRSEL DÜNYA ---
         Image = 20,             // DALL-E, Stable Diffusion (Prompt -> Image)
@@ -27,6 +29,7 @@ namespace Core.Enums
 
         // --- 4. KURGU VE MONTAJ (Timeline Oluşturma) ---
         // Burası "Hangi saniyede ne girecek?" planını yapan yer.
+        EditPlan = 59,          // İnsan editörü gibi cut, tempo, beat ve geçiş kararları
         SceneLayout = 60,
 
         // Altyazı, render aşamasında da yapılabilir ama ayrı bir stage olması 

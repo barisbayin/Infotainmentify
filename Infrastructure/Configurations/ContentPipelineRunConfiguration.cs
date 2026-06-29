@@ -22,6 +22,9 @@ namespace Infrastructure.Configurations
             // Hata mesajı uzun olabilir ama sınır koyalım (NVARCHAR(MAX) olmasın, indexlenemez)
             b.Property(x => x.ErrorMessage).HasMaxLength(4000);
 
+            b.Property(x => x.InputBriefJson).HasColumnType("nvarchar(max)");
+            b.Property(x => x.InputConceptProfileJson).HasColumnType("nvarchar(max)");
+
             b.Property(x => x.Language)
             .HasMaxLength(10) // "en-US", "tr-TR", "zh-CN" için 10 fazlasıyla yeter
             .HasDefaultValue("en-US") // Mevcut kayıtlar null kalmasın diye

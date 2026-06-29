@@ -1,4 +1,5 @@
 ﻿using Application.Contracts.Presets;
+using Application.Services;
 using Core.Entity.Presets;
 
 namespace Application.Mappers.PresetMappers
@@ -23,7 +24,7 @@ namespace Application.Mappers.PresetMappers
             ArtStyle = e.ArtStyle,
             Size = e.Size,
             Quality = e.Quality,
-            PromptTemplate = e.PromptTemplate,
+            PromptTemplate = ImagePromptDefaults.IsDefaultPromptTemplate(e.PromptTemplate) ? "" : e.PromptTemplate,
             NegativePrompt = e.NegativePrompt,
             ImageCountPerScene = e.ImageCountPerScene,
             CreatedAt = e.CreatedAt,

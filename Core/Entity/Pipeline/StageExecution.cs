@@ -107,5 +107,19 @@ namespace Core.Entity.Pipeline
             Error = errorMessage;
             AddLog($"[HATA] Kritik hata: {errorMessage}");
         }
+
+        public void MarkCancelled(string message)
+        {
+            Status = StageStatus.Cancelled;
+            FinishedAt = DateTime.UtcNow;
+            Error = message;
+
+            if (StartedAt.HasValue)
+            {
+                DurationMs = (int)(FinishedAt.Value - StartedAt.Value).TotalMilliseconds;
+            }
+
+            AddLog($"[UYARI] Aşama durduruldu: {message}");
+        }
     }
 }

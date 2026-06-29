@@ -416,12 +416,15 @@ namespace Application.Services.Pipeline
         {
             return stageType switch
             {
+                StageType.CreativeDirector => new[] { StageType.Topic },
                 StageType.Script => new[] { StageType.Topic },
+                StageType.Storyboard => new[] { StageType.Script },
                 StageType.Image => new[] { StageType.Script },
                 StageType.Thumbnail => new[] { StageType.Script },
                 StageType.VideoAI => new[] { StageType.Script, StageType.Image },
                 StageType.Tts => new[] { StageType.Script },
                 StageType.Stt => new[] { StageType.Tts },
+                StageType.EditPlan => new[] { StageType.Script, StageType.Image, StageType.Tts },
                 StageType.SceneLayout => new[] { StageType.Script, StageType.Image, StageType.Tts },
                 StageType.Render => new[] { StageType.SceneLayout },
                 StageType.Upload => new[] { StageType.Render },
@@ -654,6 +657,25 @@ namespace Application.Services.Pipeline
         {
             if (productionProfile != "LongForm") return;
 
+            if (preset is TopicPreset topic)
+            {
+                var promptText = $"{topic.SystemInstruction} {topic.PromptTemplate}";
+                if (ContainsAny(promptText, "topic ideas", "generate 1 long-form youtube topic idea", "generate 1 long-form youtube topic ideas"))
+                {
+                    AddIssue(report, stageHealth, "Warning", "profile.longform.topic_idea_list_prompt", "Topic prompt'u fikir listesi gibi gorunuyor. Long Form akista brief'i production-ready topic document'a cevirmeli.");
+                }
+
+                if (!ContainsAny(promptText, "{MainTitle}", "{BriefTitle}"))
+                {
+                    AddIssue(report, stageHealth, "Info", "profile.longform.topic_brief_anchor_missing", "Topic prompt'u {MainTitle}/{BriefTitle} placeholder'i kullanirsa brief disina kayma riski azalir.");
+                }
+
+                if (!ContainsAny(promptText, "{Angle}", "{Audience}", "{MustCover}", "{Avoid}", "{Notes}"))
+                {
+                    AddIssue(report, stageHealth, "Info", "profile.longform.topic_brief_detail_missing", "Topic prompt'u angle/audience/must-cover/avoid/notlar alanlarini kullanirsa sonraki stage'ler daha iyi beslenir.");
+                }
+            }
+
             if (preset is ScriptPreset script)
             {
                 if (script.TargetDurationSec < 480)
@@ -665,6 +687,47 @@ namespace Application.Services.Pipeline
                 if (!ContainsAny(promptText, "chapter", "section", "outline", "intro", "outro", "bolum", "bölüm"))
                 {
                     AddIssue(report, stageHealth, "Warning", "profile.longform.script_structure_missing", "Long Form script prompt'u chapter/section/intro/outro gibi bolumlu bir yapiyi acikca istemeli.");
+                }
+
+                var locksOldJsonShape = ContainsAny(
+                    promptText,
+                    "do not add extra json fields",
+                    "use only the exact json shape",
+                    "output exactly this json shape",
+                    "each scene must include: scene, audiotext, visualprompt, durationsec");
+                var hasSceneDirectionFields = ContainsAny(
+                    promptText,
+                    "sceneRole",
+                    "scenePurpose",
+                    "viewerQuestion",
+                    "emotionalBeat",
+                    "visualType",
+                    "cameraPlan",
+                    "transitionIntent");
+
+                if (locksOldJsonShape && !hasSceneDirectionFields)
+                {
+                    AddIssue(report, stageHealth, "Warning", "profile.longform.script_contract_conflict", "Script prompt'u eski JSON shape'e kilitli gorunuyor. Scene Direction V2 alanlari zayif kalabilir.");
+                }
+
+                if (ContainsAny(promptText, "do not add extra json fields", "do not add chapter objects", "do not add visualbeats"))
+                {
+                    AddIssue(report, stageHealth, "Warning", "profile.longform.script_contract_in_user_prompt", "JSON kontrati kullanici prompt'una fazla tasinmis. Kontrat backend tarafindan eklenir; preset yaratici niyeti anlatmali.");
+                }
+
+                if (script.TargetDurationSec >= 480 && ContainsAny(promptText, "12 to 18 scenes", "12-18 scenes"))
+                {
+                    AddIssue(report, stageHealth, "Warning", "profile.longform.script_scene_count_low", "8+ dk long-form icin 12-18 script sahnesi ritmi zayiflatabilir. 45-80 anlatim sahnesi daha iyi baslangic.");
+                }
+
+                if (ContainsAny(promptText, "100 to 120 scenes", "100-120 scenes", "130 scenes", "approximately 130"))
+                {
+                    AddIssue(report, stageHealth, "Warning", "profile.longform.script_scene_count_high", "Cok fazla script sahnesi image/TTS maliyetini ve rate-limit riskini artirir. Gorsel beatleri Storyboard/EditPlan yonetmeli.");
+                }
+
+                if (ContainsAny(promptText, "new visual should be generated every 4", "each scene represents exactly one visual generation"))
+                {
+                    AddIssue(report, stageHealth, "Warning", "profile.longform.script_visualbeat_mixed", "Script sahnesi gorsel beat'e karismis gorunuyor. Gorsel ritmi Storyboard/Image/EditPlan katmanlari yonetmeli.");
                 }
             }
 
@@ -714,6 +777,31 @@ namespace Application.Services.Pipeline
             {
                 AddIssue(report, null, "Warning", "workflow.stt_without_layout", "STT ciktisi genelde SceneLayout/Render caption icin kullanilir; layout stage yok.");
             }
+
+            var creativeDirectorStage = stages.FirstOrDefault(x => x.StageType == StageType.CreativeDirector);
+            var topicStage = stages.FirstOrDefault(x => x.StageType == StageType.Topic);
+            var scriptStageForDirection = stages.FirstOrDefault(x => x.StageType == StageType.Script);
+            if (creativeDirectorStage != null && topicStage != null && creativeDirectorStage.Order < topicStage.Order)
+            {
+                AddIssue(report, null, "Error", "workflow.creative_director_before_topic", "CreativeDirector, Topic'ten sonra gelmeli; video stratejisi konu ciktisina ihtiyac duyar.");
+            }
+
+            if (creativeDirectorStage != null && scriptStageForDirection != null && creativeDirectorStage.Order > scriptStageForDirection.Order)
+            {
+                AddIssue(report, null, "Warning", "workflow.creative_director_after_script", "CreativeDirector, Script'ten once gelirse senaryo prompt'una video stratejisi aktarilir.");
+            }
+
+            var editPlanStage = stages.FirstOrDefault(x => x.StageType == StageType.EditPlan);
+            var sceneLayoutStage = stages.FirstOrDefault(x => x.StageType == StageType.SceneLayout);
+            if (editPlanStage != null && sceneLayoutStage != null && editPlanStage.Order > sceneLayoutStage.Order)
+            {
+                AddIssue(report, null, "Error", "workflow.editplan_after_layout", "EditPlan, SceneLayout'tan once gelmeli; aksi halde kurgu kararları timeline'a uygulanamaz.");
+            }
+
+            if (editPlanStage != null && stages.All(x => x.StageType != StageType.Stt))
+            {
+                AddIssue(report, null, "Info", "workflow.editplan_without_stt", "EditPlan STT olmadan calisir; kelime zamanlari eklenirse vurgu ve caption kararları daha iyi olur.");
+            }
         }
 
         private static void AddProductionProfileWorkflowHints(PipelineTemplateHealthDto report, IReadOnlyList<StageConfig> stages, ContentPipelineTemplate template)
@@ -728,6 +816,7 @@ namespace Application.Services.Pipeline
                 StageType.Image,
                 StageType.Tts,
                 StageType.Stt,
+                StageType.EditPlan,
                 StageType.SceneLayout,
                 StageType.Render
             })
@@ -736,6 +825,16 @@ namespace Application.Services.Pipeline
                 {
                     AddIssue(report, null, "Error", "profile.longform.stage_missing", $"Long Form profile icin {requiredStage} stage'i gerekli.");
                 }
+            }
+
+            if (stages.All(x => x.StageType != StageType.Storyboard))
+            {
+                AddIssue(report, null, "Warning", "profile.longform.storyboard_recommended", "Long Form icin Storyboard stage sahne ritmi, shot cesitliligi ve gorsel akicilik saglar.");
+            }
+
+            if (stages.All(x => x.StageType != StageType.CreativeDirector))
+            {
+                AddIssue(report, null, "Warning", "profile.longform.creative_director_recommended", "Long Form icin CreativeDirector stage video vaadi, ana soru, bolum yapisi ve retention stratejisini senaryoya aktarir.");
             }
 
             var scriptStage = report.Stages.FirstOrDefault(x => x.StageType == StageType.Script.ToString());

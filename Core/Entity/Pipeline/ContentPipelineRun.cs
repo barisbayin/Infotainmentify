@@ -9,6 +9,10 @@ namespace Core.Entity.Pipeline
         [MaxLength(1000)]
         public string? RunContextTitle { get; set; }
 
+        public string? InputBriefJson { get; set; }
+
+        public string? InputConceptProfileJson { get; set; }
+
         public string Language { get; set; } = "en-US";
 
         [Required]

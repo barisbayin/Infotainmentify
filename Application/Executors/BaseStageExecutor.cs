@@ -104,6 +104,19 @@ namespace Application.Executors
                     Output = result
                 };
             }
+            catch (OperationCanceledException)
+            {
+                var message = "Kullanıcı isteğiyle üretim durduruldu.";
+                exec.MarkCancelled(message);
+                await logAsync(PipelineLiveLog.Warning($"Aşama durduruldu: {PipelineLiveLog.StageName(config.StageType)}."));
+
+                return new StageResult
+                {
+                    Success = false,
+                    Cancelled = true,
+                    Error = message
+                };
+            }
             catch (Exception ex)
             {
                 exec.MarkFailed(ex.Message);

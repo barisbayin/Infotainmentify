@@ -28,8 +28,8 @@ namespace Application.Contracts.Presets
         [MaxLength(20)]
         public string Quality { get; set; } = "standard";
 
-        [Required, MaxLength(5000)]
-        public string PromptTemplate { get; set; } = default!;
+        [MaxLength(5000)]
+        public string? PromptTemplate { get; set; }
 
         [MaxLength(2000)]
         public string? NegativePrompt { get; set; }

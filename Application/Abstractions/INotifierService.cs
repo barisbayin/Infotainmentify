@@ -7,5 +7,6 @@
         Task JobCompletedAsync(int userId, int jobId, bool success, string? message = null);
 
         Task SendLogAsync(int runId, string message);
+        Task SendRenderProgressAsync(int runId, Application.Models.RenderProgressUpdate progress);
     }
 }

@@ -26,5 +26,7 @@ namespace Core.Entity.Pipeline
         // Bir konseptin altında birden fazla "Tarif" (Template) olabilir.
         // Örn: "History Facts" altında -> "Shorts (Dikey)" ve "Long Form (Yatay)"
         public ICollection<ContentPipelineTemplate> Templates { get; set; } = new List<ContentPipelineTemplate>();
+
+        public ProductionConceptProfile? Profile { get; set; }
     }
 }

@@ -491,6 +491,12 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
 
+                    b.Property<string>("InputBriefJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("InputConceptProfileJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -609,6 +615,206 @@ namespace Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ContentPipelineTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("Core.Entity.Pipeline.ProductionConceptProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Audience")
+                        .HasMaxLength(800)
+                        .HasColumnType("nvarchar(800)");
+
+                    b.Property<string>("ChannelPromise")
+                        .HasMaxLength(1200)
+                        .HasColumnType("nvarchar(1200)");
+
+                    b.Property<string>("CharacterBible")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ConceptId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ContentRules")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2(0)")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<int?>("DefaultDurationSec")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DefaultLanguage")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("en-US");
+
+                    b.Property<string>("DefaultPlatform")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasDefaultValue("YouTube");
+
+                    b.Property<string>("DefaultReviewPolicyJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("DefaultTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("ProductionProfile")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasDefaultValue("LongForm");
+
+                    b.Property<bool>("Removed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("datetime2(0)");
+
+                    b.Property<string>("TextPolicy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Tone")
+                        .HasMaxLength(800)
+                        .HasColumnType("nvarchar(800)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2(0)");
+
+                    b.Property<string>("VisualStyleBible")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("VisualStyleName")
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConceptId")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("DefaultTemplateId");
+
+                    b.HasIndex("ProductionProfile");
+
+                    b.HasIndex("Removed");
+
+                    b.HasIndex("AppUserId", "ConceptId")
+                        .IsUnique();
+
+                    b.ToTable("ProductionConceptProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("Core.Entity.Pipeline.SavedProductionBrief", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Angle")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Audience")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Avoid")
+                        .HasMaxLength(1500)
+                        .HasColumnType("nvarchar(1500)");
+
+                    b.Property<int?>("ConceptId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2(0)")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MainTitle")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("MustCover")
+                        .HasMaxLength(2500)
+                        .HasColumnType("nvarchar(2500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2500)
+                        .HasColumnType("nvarchar(2500)");
+
+                    b.Property<bool>("Removed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("datetime2(0)");
+
+                    b.Property<string>("TargetDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2(0)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConceptId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("LastUsedAt");
+
+                    b.HasIndex("Removed");
+
+                    b.HasIndex("AppUserId", "ConceptId");
+
+                    b.HasIndex("AppUserId", "Name");
+
+                    b.ToTable("SavedProductionBriefs", (string)null);
                 });
 
             modelBuilder.Entity("Core.Entity.Pipeline.StageConfig", b =>
@@ -1881,6 +2087,50 @@ namespace Infrastructure.Migrations
                     b.Navigation("Concept");
                 });
 
+            modelBuilder.Entity("Core.Entity.Pipeline.ProductionConceptProfile", b =>
+                {
+                    b.HasOne("Core.Entity.User.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.Pipeline.Concept", "Concept")
+                        .WithOne("Profile")
+                        .HasForeignKey("Core.Entity.Pipeline.ProductionConceptProfile", "ConceptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.Pipeline.ContentPipelineTemplate", "DefaultTemplate")
+                        .WithMany()
+                        .HasForeignKey("DefaultTemplateId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("AppUser");
+
+                    b.Navigation("Concept");
+
+                    b.Navigation("DefaultTemplate");
+                });
+
+            modelBuilder.Entity("Core.Entity.Pipeline.SavedProductionBrief", b =>
+                {
+                    b.HasOne("Core.Entity.User.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Core.Entity.Pipeline.Concept", "Concept")
+                        .WithMany()
+                        .HasForeignKey("ConceptId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("AppUser");
+
+                    b.Navigation("Concept");
+                });
+
             modelBuilder.Entity("Core.Entity.Pipeline.StageConfig", b =>
                 {
                     b.HasOne("Core.Entity.Pipeline.ContentPipelineTemplate", "ContentPipelineTemplate")
@@ -2096,6 +2346,8 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Core.Entity.Pipeline.Concept", b =>
                 {
+                    b.Navigation("Profile");
+
                     b.Navigation("Templates");
                 });
 

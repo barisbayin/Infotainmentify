@@ -1,5 +1,6 @@
 ﻿using Application.Abstractions;
 using Application.AiLayer.Abstract;
+using Application.Executors;
 using Application.Services.Interfaces;
 using Core.Entity.Presets;
 
@@ -20,6 +21,7 @@ namespace Application.Services
             int userId,
             int runId,
             int sceneNumber,
+            int beatIndex,
             string prompt,
             int? connectionId,
             ImagePreset preset, // 🔥 Tüm ayarlar burada
@@ -32,18 +34,20 @@ namespace Application.Services
             var outputDir = await _dirService.GetRunDirectoryAsync(userId, runId, "images");
 
             // 3. ÜRETİM (Verileri Preset içinden söküyoruz)
-            var imageBytes = await aiClient.GenerateImageAsync(
-                prompt: prompt,
-                // 🔥 BURASI ÖNEMLİ: Preset içindeki verileri kullanıyoruz
-                negativePrompt: preset.NegativePrompt,
+            var imageBytes = await AiImageRetryPolicy.GenerateImageAsync(
+                aiClient: aiClient,
+                operationLabel: $"Sahne {sceneNumber} / Beat {beatIndex} manuel görsel yenileme",
+                prompt: ImagePromptComposer.EnsureTextHandlingRule(prompt),
+                negativePrompt: ImagePromptComposer.StrengthenNegativePrompt(preset.NegativePrompt),
                 size: preset.Size,
                 style: preset.ArtStyle,
                 model: preset.ModelName,
+                logAsync: _ => Task.CompletedTask,
                 ct: ct
             );
 
             // 4. Kaydet
-            var fileName = $"scene_{sceneNumber:00}_{Guid.NewGuid().ToString()[..6]}.png";
+            var fileName = $"scene_{sceneNumber:00}_b{Math.Max(1, beatIndex):00}_{Guid.NewGuid().ToString()[..6]}.png";
             var fullPath = Path.Combine(outputDir, fileName);
 
             await File.WriteAllBytesAsync(fullPath, imageBytes, ct);

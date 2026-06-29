@@ -8,6 +8,7 @@ namespace Application.Services.Interfaces
                 int userId,
                 int runId,
                 int sceneNumber,
+                int beatIndex,
                 string prompt,
                 int? connectionId,
                 ImagePreset preset, // 🔥 İçinde NegativePrompt, Size, Style her şey var

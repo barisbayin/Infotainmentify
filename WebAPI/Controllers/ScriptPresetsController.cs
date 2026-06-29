@@ -1,5 +1,6 @@
 ﻿using Application.Contracts.Presets;
 using Application.Extensions;
+using Application.Services;
 using Application.Services.PresetService;
 using Core.Entity.Presets;
 using Microsoft.AspNetCore.Authorization;
@@ -57,8 +58,8 @@ namespace WebAPI.Controllers
                 Language = dto.Language,
                 IncludeHook = dto.IncludeHook,
                 IncludeCta = dto.IncludeCta,
-                PromptTemplate = dto.PromptTemplate,
-                SystemInstruction = dto.SystemInstruction
+                PromptTemplate = ScriptPromptDefaults.ResolvePromptTemplate(dto.PromptTemplate),
+                SystemInstruction = ScriptPromptDefaults.CleanOptional(dto.SystemInstruction)
                 // AppUserId serviste set edilir
             };
 
@@ -84,8 +85,8 @@ namespace WebAPI.Controllers
             entity.Language = dto.Language;
             entity.IncludeHook = dto.IncludeHook;
             entity.IncludeCta = dto.IncludeCta;
-            entity.PromptTemplate = dto.PromptTemplate;
-            entity.SystemInstruction = dto.SystemInstruction;
+            entity.PromptTemplate = ScriptPromptDefaults.ResolvePromptTemplate(dto.PromptTemplate);
+            entity.SystemInstruction = ScriptPromptDefaults.CleanOptional(dto.SystemInstruction);
 
             await _service.UpdateAsync(entity, userId, ct);
             return NoContent();

@@ -1,4 +1,5 @@
 ﻿using Application.Contracts.Presets;
+using Application.Services;
 using Core.Entity.Presets;
 
 namespace Application.Mappers.PresetMappers
@@ -30,9 +31,9 @@ namespace Application.Mappers.PresetMappers
                 ModelName = e.ModelName,
                 Temperature = e.Temperature,
                 Language = e.Language,
-                PromptTemplate = e.PromptTemplate,
+                PromptTemplate = string.Equals(e.PromptTemplate?.Trim(), TopicPromptDefaults.DefaultPromptTemplate.Trim(), StringComparison.Ordinal) ? "" : e.PromptTemplate ?? "",
                 ContextKeywordsJson = e.ContextKeywordsJson,
-                SystemInstruction = e.SystemInstruction,
+                SystemInstruction = string.Equals(e.SystemInstruction?.Trim(), TopicPromptDefaults.DefaultSystemInstruction.Trim(), StringComparison.Ordinal) ? "" : e.SystemInstruction,
                 CreatedAt = e.CreatedAt,
                 UpdatedAt = e.UpdatedAt
             };

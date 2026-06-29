@@ -1,4 +1,5 @@
 ﻿using Application.Contracts.Presets;
+using Application.Services;
 using Core.Entity.Presets;
 
 namespace Application.Mappers.PresetMappers
@@ -26,8 +27,8 @@ namespace Application.Mappers.PresetMappers
             Language = e.Language,
             IncludeHook = e.IncludeHook,
             IncludeCta = e.IncludeCta,
-            PromptTemplate = e.PromptTemplate,
-            SystemInstruction = e.SystemInstruction,
+            PromptTemplate = ScriptPromptDefaults.IsDefaultPromptTemplate(e.PromptTemplate) ? "" : e.PromptTemplate,
+            SystemInstruction = ScriptPromptDefaults.IsDefaultSystemInstruction(e.SystemInstruction) ? "" : e.SystemInstruction,
             CreatedAt = e.CreatedAt,
             UpdatedAt = e.UpdatedAt
         };

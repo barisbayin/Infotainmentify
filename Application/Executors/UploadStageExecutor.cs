@@ -50,6 +50,13 @@ namespace Application.Executors
             List<string> aiTags = scriptOutput?.Tags ?? new List<string>();
             ThumbnailStagePayload? thumbnailOutput = null;
             try { thumbnailOutput = context.GetOutput<ThumbnailStagePayload>(StageType.Thumbnail); } catch { }
+            var package = thumbnailOutput?.YouTubePackage;
+            if (package != null)
+            {
+                aiTitle = package.TitleOptions.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? aiTitle;
+                aiDesc = string.IsNullOrWhiteSpace(package.Description) ? aiDesc : package.Description;
+                aiTags = package.Tags.Count > 0 ? package.Tags : aiTags;
+            }
 
             // 3. SERVİSLERİ HAZIRLA
             var platformServices = _serviceProvider.GetServices<ISocialPlatformService>();

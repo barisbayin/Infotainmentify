@@ -10,6 +10,7 @@ namespace Application.Abstractions
             string outputPath,
             string cultureCode = "en-US",
             CancellationToken ct = default,
-            Func<string, Task>? logAsync = null);
+            Func<string, Task>? logAsync = null,
+            Func<RenderProgressUpdate, Task>? progressAsync = null);
     }
 }

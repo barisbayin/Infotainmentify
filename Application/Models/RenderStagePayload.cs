@@ -17,5 +17,18 @@
 
         public double FileSizeMb { get; set; }
         public double Duration { get; set; }
+        public RenderAudioQaReport? AudioQa { get; set; }
+    }
+
+    public class RenderAudioQaReport
+    {
+        public double DurationSec { get; set; }
+        public double MeanVolumeDb { get; set; }
+        public double MaxVolumeDb { get; set; }
+        public double SilenceDurationSec { get; set; }
+        public int SilenceSegmentCount { get; set; }
+        public double SilenceRatio { get; set; }
+        public string Status { get; set; } = "Unknown";
+        public List<string> Warnings { get; set; } = new();
     }
 }

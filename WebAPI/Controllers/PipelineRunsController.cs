@@ -49,6 +49,19 @@ namespace WebAPI.Controllers
             catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         }
 
+        [HttpPost("{id}/cancel")]
+        public async Task<IActionResult> CancelRun(int id, CancellationToken ct)
+        {
+            try
+            {
+                int userId = User.GetUserId();
+                await _pipelineService.CancelRunAsync(userId, id, ct);
+                return Ok(new { Message = "Execution cancelled." });
+            }
+            catch (KeyNotFoundException) { return NotFound(); }
+            catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        }
+
         // GET DETAILS
         [HttpGet("{id}")]
         public async Task<ActionResult<PipelineRunDetailDto>> GetRunDetails(int id, CancellationToken ct)
@@ -113,7 +126,7 @@ namespace WebAPI.Controllers
             try
             {
                 // Tüm işi servise yıktık
-                await _pipelineService.ApproveRunAsync(runId, ct);
+                await _pipelineService.ApproveRunAsync(User.GetUserId(), runId, ct);
 
                 return Ok(new { message = "🚀 Onay verildi, süreç kaldığı yerden devam ediyor!" });
             }
@@ -132,24 +145,27 @@ namespace WebAPI.Controllers
             }
         }
 
-        [HttpPost("{runId}/scenes/{sceneIndex}/regenerate")]
+        [HttpPost("{runId}/scenes/{sceneNumber}/regenerate")]
         public async Task<IActionResult> RegenerateSceneImage(
             [FromRoute] int runId,
-            [FromRoute] int sceneIndex,
+            [FromRoute] int sceneNumber,
+            [FromQuery] int? beatIndex,
+            [FromQuery] string? imagePath,
             CancellationToken ct)
         {
             try
             {
                 // Servisteki metodu çağırıyoruz
                 // Dönüş değeri: Yeni üretilen görselin dosya yolu (string)
-                var newImagePath = await _pipelineService.RegenerateSceneImageAsync(runId, sceneIndex, ct);
+                var newImagePath = await _pipelineService.RegenerateSceneImageAsync(runId, sceneNumber, beatIndex, imagePath, ct);
 
                 // Frontend'e JSON olarak dönüyoruz
                 return Ok(new
                 {
                     message = "✅ Görsel başarıyla yenilendi!",
                     url = newImagePath,
-                    sceneIndex = sceneIndex
+                    sceneNumber,
+                    beatIndex
                 });
             }
             catch (KeyNotFoundException ex)

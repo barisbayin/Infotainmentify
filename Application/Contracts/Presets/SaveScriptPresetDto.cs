@@ -32,8 +32,8 @@ namespace Application.Contracts.Presets
         public bool IncludeHook { get; set; } = true;
         public bool IncludeCta { get; set; } = true;
 
-        [Required, MaxLength(5000)]
-        public string PromptTemplate { get; set; } = default!;
+        [MaxLength(5000)]
+        public string? PromptTemplate { get; set; }
 
         [MaxLength(2000)]
         public string? SystemInstruction { get; set; }

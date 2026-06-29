@@ -1,6 +1,7 @@
 ﻿using Application.Abstractions;
 using Application.Executors;
 using Application.Models;
+using Application.Services.Pipeline;
 using Core.Contracts;
 using Core.Entity.Pipeline;
 using Core.Enums;
@@ -83,6 +84,8 @@ namespace Application.Pipeline
 
             // Zaten bitmişse tekrar çalıştırma
             if (run.Status == ContentPipelineStatus.Completed) return;
+            if (run.Status == ContentPipelineStatus.Cancelled) return;
+            ct.ThrowIfCancellationRequested();
 
             // Durumu güncelle (Eğer WaitingForApproval ise, Service katmanı zaten Processing yapmıştı, dokunmuyoruz)
             if (run.Status != ContentPipelineStatus.WaitingForApproval)
@@ -101,6 +104,8 @@ namespace Application.Pipeline
 
             foreach (var stageConfig in stages)
             {
+                ct.ThrowIfCancellationRequested();
+
                 // Hafızadaki listeden execution kaydını bul
                 var exec = run.StageExecutions.FirstOrDefault(x => x.StageConfigId == stageConfig.Id);
 
@@ -136,6 +141,19 @@ namespace Application.Pipeline
                     await _uow.SaveChangesAsync(ct);
                 }
 
+                if (exec.Status == StageStatus.WaitingForApproval)
+                {
+                    var message = stageConfig.StageType == StageType.Render
+                        ? "Render öncesi duruldu. Görselleri ve kurgu planını kontrol ettikten sonra Render'a Başla ile devam edebilirsin."
+                        : $"Aşama manuel onay bekliyor: {PipelineLiveLog.StageName(stageConfig.StageType)}.";
+
+                    run.Status = ContentPipelineStatus.WaitingForApproval;
+                    run.ErrorMessage = null;
+                    await LogAsync(exec, PipelineLiveLog.Warning(message));
+                    await _uow.SaveChangesAsync(ct);
+                    return;
+                }
+
                 // A) EĞER TAMAMLANMIŞSA -> Context'i doldur ve GEÇ (Resume Mantığı)
                 if (exec.Status == StageStatus.Completed)
                 {
@@ -161,6 +179,12 @@ namespace Application.Pipeline
 
                 if (!success)
                 {
+                    if (ct.IsCancellationRequested || exec.Status == StageStatus.Cancelled || run.Status == ContentPipelineStatus.Cancelled)
+                    {
+                        await MarkRunCancelledAsync(run, exec);
+                        return;
+                    }
+
                     run.Status = ContentPipelineStatus.Failed;
                     run.ErrorMessage = exec.Error;
                     await _uow.SaveChangesAsync(ct);
@@ -207,6 +231,21 @@ namespace Application.Pipeline
             await SendRunLogAsync(run.Id, PipelineLiveLog.Success("Üretim hattı başarıyla tamamlandı."));
         }
 
+        private async Task MarkRunCancelledAsync(ContentPipelineRun run, StageExecution? currentExec = null)
+        {
+            run.Status = ContentPipelineStatus.Cancelled;
+            run.CompletedAt ??= DateTime.UtcNow;
+            run.ErrorMessage = "Kullanıcı tarafından durduruldu.";
+
+            if (currentExec != null && currentExec.Status is StageStatus.Running or StageStatus.Retrying)
+            {
+                currentExec.MarkCancelled("Kullanıcı tarafından durduruldu.");
+            }
+
+            await _uow.SaveChangesAsync(CancellationToken.None);
+            await SendRunLogAsync(run.Id, PipelineLiveLog.Warning("Üretim hattı durduruldu."));
+        }
+
         // -----------------------------------------------------------------------
         // ⚙️ EXECUTE STAGE (Retry & Error Handling)
         // -----------------------------------------------------------------------
@@ -224,6 +263,8 @@ namespace Application.Pipeline
 
             for (int attempt = 0; attempt <= MaxRetryCount; attempt++)
             {
+                ct.ThrowIfCancellationRequested();
+
                 if (attempt > 0)
                 {
                     exec.Status = StageStatus.Retrying;
@@ -257,6 +298,13 @@ namespace Application.Pipeline
                     return true;
                 }
 
+                if (result.Cancelled)
+                {
+                    await LogAsync(exec, PipelineLiveLog.Warning($"Aşama durduruldu: {stageName}."));
+                    await _uow.SaveChangesAsync(CancellationToken.None);
+                    return false;
+                }
+
                 // Hata Durumu
                 await LogAsync(exec, PipelineLiveLog.Error($"Aşama denemesi başarısız oldu: {stageName}. Deneme: {attempt + 1}. Hata: {PipelineLiveLog.Shorten(result.Error, 500)}"));
 
@@ -272,7 +320,17 @@ namespace Application.Pipeline
 
                 // Backoff (Bekleme)
                 await LogAsync(exec, $"Bir sonraki denemeden önce {attempt + 1} saniye bekleniyor.");
-                await Task.Delay(1000 * (attempt + 1), ct);
+                try
+                {
+                    await Task.Delay(1000 * (attempt + 1), ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    exec.MarkCancelled("Kullanıcı tarafından durduruldu.");
+                    await LogAsync(exec, PipelineLiveLog.Warning($"Aşama bekleme sırasında durduruldu: {stageName}."));
+                    await _uow.SaveChangesAsync(CancellationToken.None);
+                    return false;
+                }
             }
 
             return false;
@@ -386,6 +444,8 @@ namespace Application.Pipeline
             // 3. Arka Planda Yeniden Başlat (Fire & Forget)
             await Task.Delay(200); // Concurrency önlemi
 
+            var runCts = PipelineRunCancellationRegistry.Register(runId);
+
             _ = Task.Run(async () =>
             {
                 try
@@ -394,11 +454,19 @@ namespace Application.Pipeline
                     var runner = scope.ServiceProvider.GetRequiredService<IContentPipelineRunner>();
 
                     // Yeni scope ile temiz bir başlangıç
-                    await runner.RunAsync(runId, CancellationToken.None);
+                    await runner.RunAsync(runId, runCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // RunAsync cancel durumunu kalıcılaştırır.
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Background Retry Failed: {ex.Message}");
+                }
+                finally
+                {
+                    PipelineRunCancellationRegistry.Complete(runId, runCts);
                 }
             });
         }
